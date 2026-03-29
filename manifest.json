@@ -44,7 +44,10 @@
         "*://*.crm16.dynamics.com/*",
         "*://*.crm17.dynamics.com/*",
         "*://*.crm19.dynamics.com/*",
-        "*://*.crm20.dynamics.com/*"
+        "*://*.crm20.dynamics.com/*",
+        "*://*.crm.microsoftdynamics.us/*",
+        "*://*.crm.appsplatform.us/*",
+        "*://*.crm.dynamics.cn/*"
       ],
       "js": ["src/content/content.js"],
       "run_at": "document_idle",
@@ -74,7 +77,10 @@
     "*://*.crm16.dynamics.com/*",
     "*://*.crm17.dynamics.com/*",
     "*://*.crm19.dynamics.com/*",
-    "*://*.crm20.dynamics.com/*"
+    "*://*.crm20.dynamics.com/*",
+    "*://*.crm.microsoftdynamics.us/*",
+    "*://*.crm.appsplatform.us/*",
+    "*://*.crm.dynamics.cn/*"
   ],
 
   "content_security_policy": {
@@ -82,10 +88,6 @@
   },
 
   "web_accessible_resources": [
-    {
-      "resources": ["icons/*"],
-      "matches": ["*://*.dynamics.com/*"]
-    },
     {
       "resources": ["src/inject/page-bridge.js"],
       "matches": [
@@ -104,7 +106,10 @@
         "*://*.crm16.dynamics.com/*",
         "*://*.crm17.dynamics.com/*",
         "*://*.crm19.dynamics.com/*",
-        "*://*.crm20.dynamics.com/*"
+        "*://*.crm20.dynamics.com/*",
+        "*://*.crm.microsoftdynamics.us/*",
+        "*://*.crm.appsplatform.us/*",
+        "*://*.crm.dynamics.cn/*"
       ],
       "use_dynamic_urls": false
     }

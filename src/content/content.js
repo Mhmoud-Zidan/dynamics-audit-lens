@@ -199,8 +199,9 @@ function requestFreshContext() {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const API_VERSION    = '9.2';
-const MAX_CONCURRENT = 5;
+const API_VERSION      = '9.2';
+const MAX_CONCURRENT   = 5;
+const MAX_EXPORT_ROWS  = 100_000;
 
 /**
  * Standard OData headers required by the Dataverse REST endpoint.
@@ -846,10 +847,9 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
     // ── One row per changed field ───────────────────────────────────────────
     for (const logicalName of changedFields) {
       const attrMeta    = entityMeta.attributes.get(logicalName) ?? null;
-      // When metadata is unavailable (deleted field), tag the name so users
-      // understand why the display name is a raw logical name.
-      const displayName = attrMeta?.displayName
-        ?? (maskNames.includes(logicalName) ? `${logicalName} (deleted)` : logicalName);
+      // When metadata is unavailable (deleted field or inaccessible schema),
+      // tag the name so users understand why the display name is raw.
+      const displayName = attrMeta?.displayName ?? `${logicalName} (deleted)`;
 
       const hasOld = Object.prototype.hasOwnProperty.call(oldValue, logicalName);
       const hasNew = Object.prototype.hasOwnProperty.call(newValue, logicalName);
@@ -970,6 +970,10 @@ chrome.runtime.onMessage.addListener(function onExtensionMessage(message, _sende
 chrome.runtime.onConnect.addListener(function onPortConnect(port) {
   if (port.name !== 'audit-export') return;
 
+  // C1 fix: track connection state so workers abort when the popup closes.
+  let portAlive = true;
+  port.onDisconnect.addListener(() => { portAlive = false; });
+
   port.onMessage.addListener(async function onPortMessage(msg) {
     const { entityLogicalName, guids } = msg ?? {};
     if (typeof entityLogicalName !== 'string' || !Array.isArray(guids) || guids.length === 0) {
@@ -983,16 +987,20 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
       try {
         entitySetName = await resolveEntitySetName(entityLogicalName);
       } catch (err) {
-        port.postMessage({ type: 'error', error: err.message });
+        if (portAlive) port.postMessage({ type: 'error', error: err.message });
         return;
       }
 
       const total  = guids.length;
       let   done   = 0;
       const allRows = [];
+      let   rowCapHit = false;
 
       // Build task factories for the pool — each task posts progress on completion.
       const tasks = guids.map(guid => async () => {
+        // C1: abort early if the popup has disconnected.
+        if (!portAlive) return { guid, entitySetName, error: 'cancelled' };
+
         let result;
         try {
           result = await fetchAuditHistoryForRecord(entitySetName, guid);
@@ -1007,6 +1015,7 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
           result = { guid, entitySetName, error: errorMsg, status };
         }
 
+        // C2 fix: wrap formatting in try/catch so one bad record doesn't kill the batch.
         if (result.error) {
           allRows.push({
             RecordID: result.guid, ChangedBy: '', ChangedDate: '',
@@ -1014,19 +1023,38 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
             NewValue: result.error,
           });
         } else {
-          const rows = await formatAuditResults(result.guid, entityLogicalName, result.data);
-          allRows.push(...rows);
+          try {
+            const rows = await formatAuditResults(result.guid, entityLogicalName, result.data);
+            // C3 fix: enforce row cap at the source to prevent tab OOM.
+            if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
+              allRows.push(...rows);
+            } else if (!rowCapHit) {
+              const remaining = MAX_EXPORT_ROWS - allRows.length;
+              if (remaining > 0) allRows.push(...rows.slice(0, remaining));
+              rowCapHit = true;
+            }
+          } catch (fmtErr) {
+            allRows.push({
+              RecordID: result.guid, ChangedBy: '', ChangedDate: '',
+              Operation: 'FORMAT_ERROR', FieldName: '', OldValue: '',
+              NewValue: fmtErr.message ?? String(fmtErr),
+            });
+          }
         }
 
         done++;
-        try { port.postMessage({ type: 'progress', done, total }); } catch { /* port closed */ }
+        if (portAlive) {
+          try { port.postMessage({ type: 'progress', done, total }); } catch { /* port closed */ }
+        }
         return result;
       });
 
       await runPool(tasks, MAX_CONCURRENT);
-      port.postMessage({ type: 'done', rows: allRows });
+      if (portAlive) port.postMessage({ type: 'done', rows: allRows, capped: rowCapHit });
     } catch (err) {
-      try { port.postMessage({ type: 'error', error: err.message ?? String(err) }); } catch { /* port closed */ }
+      if (portAlive) {
+        try { port.postMessage({ type: 'error', error: err.message ?? String(err) }); } catch { /* port closed */ }
+      }
     }
   });
 });

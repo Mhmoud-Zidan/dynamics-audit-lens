@@ -112,7 +112,7 @@ function sendToTab(tabId, message) {
 
 // ── Context detection ─────────────────────────────────────────────────────────
 
-const DYNAMICS_PATTERN = /^https?:\/\/[^/]+\.crm\d*\.dynamics\.com\//;
+const DYNAMICS_PATTERN = /^https?:\/\/[^/]+\.(crm\d*\.dynamics\.com|crm\.microsoftdynamics\.us|crm\.appsplatform\.us|crm\.dynamics\.cn)\//;
 
 /** Query the active tab, verify it's a Dynamics page, and fetch Xrm context. */
 async function fetchContext() {
