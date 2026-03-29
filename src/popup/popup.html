@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      CSP for the popup page. 'self' only — no inline scripts, no remote resources.
-      'unsafe-inline' is kept for styles only (required for dynamic highlight colours).
+      CSP for the popup page. Matches the stricter manifest-level CSP.
+      No 'unsafe-inline' needed — all styles are in popup.css or set via CSSOM.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none';"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none';"
     />
     <title>Dynamics Audit Lens</title>
     <link rel="stylesheet" href="popup.css" />
@@ -23,6 +23,20 @@
 
       <main id="main-content" class="main">
         <p id="status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+
+        <div id="record-info" class="record-info" hidden>
+          <span id="record-count" class="record-info__count">0 records selected</span>
+          <span id="entity-name" class="record-info__entity"></span>
+        </div>
+
+        <button id="export-btn" class="btn btn--primary" disabled>Export to Excel</button>
+
+        <div id="progress-section" class="progress-section" hidden>
+          <div class="progress-bar">
+            <div id="progress-fill" class="progress-bar__fill"></div>
+          </div>
+          <p id="progress-text" class="progress-text">Preparing…</p>
+        </div>
       </main>
 
       <footer class="footer">

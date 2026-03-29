@@ -47,7 +47,7 @@
   }
 
   /** Validate a string is a well-formed GUID. Rejects attacker-controlled junk. */
-  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function isGuid(s) {
     return typeof s === 'string' && GUID_RE.test(s);
   }
@@ -199,12 +199,19 @@
       selectedIds = readSelectedGridIds();
     }
 
+    // Flag when we're on a list page but couldn't detect any selection method.
+    // This helps the popup warn the user instead of silently showing "0 selected".
+    const selectionUnavailable = base.pageType === 'entitylist'
+      && selectedIds.length === 0
+      && document.querySelectorAll('[aria-selected="true"]').length > 0;
+
     return {
       available:   true,
       pageType:    base.pageType,
       entityName:  base.entityName,
       entityId:    base.entityId,
       selectedIds,
+      selectionUnavailable,
     };
   }
 

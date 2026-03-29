@@ -33,12 +33,17 @@
 'use strict';
 
 // ── Guard against double injection ────────────────────────────────────────────
-if (window.__dalContentV1) {
-  throw new Error('DAL: content script already active');
+// Uses a module-scoped closure variable instead of a window property to prevent
+// a hostile page script from pre-setting the flag and silently disabling us.
+{
+  const key = Symbol.for('__dalContentV1');
+  if (globalThis[key]) {
+    throw new Error('DAL: content script already active');
+  }
+  Object.defineProperty(globalThis, key, {
+    value: true, writable: false, configurable: false, enumerable: false,
+  });
 }
-Object.defineProperty(window, '__dalContentV1', {
-  value: true, writable: false, configurable: false,
-});
 
 // ── Message type constants ────────────────────────────────────────────────────
 const T_READY    = '__DAL__BRIDGE_READY';
@@ -96,15 +101,6 @@ function injectBridge() {
   } catch (err) {
     console.error('[Audit Lens] Bridge injection failed:', err);
   }
-}
-
-// ── postMessage validation ────────────────────────────────────────────────────
-
-function isTrustedBridgeEvent(event, expectedType) {
-  if (event.source !== window)                      return false;
-  if (!EXPECTED_ORIGIN || event.origin !== EXPECTED_ORIGIN) return false;
-  if (!event.data || event.data.type !== expectedType)      return false;
-  return true;
 }
 
 // ── Pending request queue ────────────────────────────────────────────────────
@@ -403,19 +399,44 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
   assertEntitySetName(entitySetName);
   assertGuid(guid);
 
-  const url = `${getOrgUri()}/api/data/v${API_VERSION}`
-            + `/${entitySetName}(${encodeURIComponent(guid)})`
-            + `/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory()`;
+  const baseUrl = `${getOrgUri()}/api/data/v${API_VERSION}`
+               + `/${entitySetName}(${encodeURIComponent(guid)})`
+               + `/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory()`;
 
-  const response = await fetchWithRetry(() =>
-    fetch(url, {
-      method:      'GET',
-      credentials: 'include',      // send the MSCRM session cookie
-      headers:     ODATA_HEADERS,
-    })
-  );
+  // Follow @odata.nextLink pagination — RetrieveRecordChangeHistory can return
+  // paginated results when audit history exceeds the server page size (~5 000).
+  let allDetails = [];
+  let url = baseUrl;
+  const MAX_PAGES = 50; // safety cap to prevent infinite loops
 
-  const data = await response.json();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const response = await fetchWithRetry(() =>
+      fetch(url, {
+        method:      'GET',
+        credentials: 'include',      // send the MSCRM session cookie
+        headers:     ODATA_HEADERS,
+      })
+    );
+
+    const json = await response.json();
+    const details = json?.AuditDetailCollection?.AuditDetails ?? [];
+    allDetails = allDetails.concat(details);
+
+    const nextLink = json['@odata.nextLink'];
+    if (!nextLink) break;
+
+    // Validate nextLink is same-origin to prevent SSRF via tampered response.
+    try {
+      const parsedNext = new URL(nextLink);
+      if (parsedNext.origin !== window.location.origin) break;
+      url = nextLink;
+    } catch {
+      break;
+    }
+  }
+
+  // Reconstruct the expected response shape with all pages merged.
+  const data = { AuditDetailCollection: { AuditDetails: allDetails } };
   return { guid, entitySetName, data };
 }
 
@@ -445,11 +466,18 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
       return await fetchAuditHistoryForRecord(entitySetName, guid);
     } catch (err) {
       // Capture per-record failures; don't let one record block others.
+      const status = err instanceof ApiError ? err.status : undefined;
+      let errorMsg = err.message ?? String(err);
+      if (status === 403) {
+        errorMsg = 'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+      } else if (status === 404) {
+        errorMsg = 'Record not found \u2014 it may have been deleted.';
+      }
       return {
         guid,
         entitySetName,
-        error:  err.message ?? String(err),
-        status: err instanceof ApiError ? err.status : undefined,
+        error:  errorMsg,
+        status,
       };
     }
   });
@@ -555,7 +583,7 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   const url = `${getOrgUri()}/api/data/v${API_VERSION}`
             + `/EntityDefinitions(LogicalName='${entityLogicalName}')`
-            + `?$select=LogicalName,PrimaryIdAttribute`
+            + `?$select=LogicalName,PrimaryIdAttribute,EntitySetName`
             + `&$expand=Attributes(${nestedOpts})`;
 
   const response = await fetchWithRetry(() =>
@@ -609,13 +637,34 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   /** @type {EntityMeta} */
   const entityMeta = {
-    primaryId:  json.PrimaryIdAttribute ?? `${entityLogicalName}id`,
+    primaryId:     json.PrimaryIdAttribute ?? `${entityLogicalName}id`,
+    entitySetName: json.EntitySetName ?? null,
     attributes,
     byColumn,
   };
 
   metadataCache.set(entityLogicalName, entityMeta);
   return entityMeta;
+}
+
+// ── Entity set name resolver ──────────────────────────────────────────────────
+
+/**
+ * Resolve the plural entity set name from an entity logical name.
+ * Checks the metadata cache first; falls back to fetching metadata.
+ *
+ * @param {string} entityLogicalName  e.g. "account"
+ * @returns {Promise<string>}         e.g. "accounts"
+ */
+async function resolveEntitySetName(entityLogicalName) {
+  assertEntityLogicalName(entityLogicalName);
+  const cached = metadataCache.get(entityLogicalName);
+  if (cached?.entitySetName) return cached.entitySetName;
+  const meta = await fetchEntityMetadata(entityLogicalName);
+  if (!meta.entitySetName) {
+    throw new Error(`Could not resolve EntitySetName for "${entityLogicalName}". Ensure the entity exists and you have read access.`);
+  }
+  return meta.entitySetName;
 }
 
 // ── AttributeMask decoder ─────────────────────────────────────────────────────
@@ -740,7 +789,16 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
   assertGuid(guid);
   assertEntityLogicalName(entityLogicalName);
 
-  const entityMeta   = await fetchEntityMetadata(entityLogicalName);
+  // Gracefully degrade if metadata is unavailable (403, deleted entity, etc.).
+  let entityMeta;
+  try {
+    entityMeta = await fetchEntityMetadata(entityLogicalName);
+  } catch {
+    entityMeta = {
+      primaryId: `${entityLogicalName}id`, entitySetName: null,
+      attributes: new Map(), byColumn: new Map(),
+    };
+  }
   const auditDetails = rawAuditData?.AuditDetailCollection?.AuditDetails ?? [];
 
   /** @type {FormattedAuditRow[]} */
@@ -788,7 +846,10 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
     // ── One row per changed field ───────────────────────────────────────────
     for (const logicalName of changedFields) {
       const attrMeta    = entityMeta.attributes.get(logicalName) ?? null;
-      const displayName = attrMeta?.displayName ?? logicalName;
+      // When metadata is unavailable (deleted field), tag the name so users
+      // understand why the display name is a raw logical name.
+      const displayName = attrMeta?.displayName
+        ?? (maskNames.includes(logicalName) ? `${logicalName} (deleted)` : logicalName);
 
       const hasOld = Object.prototype.hasOwnProperty.call(oldValue, logicalName);
       const hasNew = Object.prototype.hasOwnProperty.call(newValue, logicalName);
@@ -853,17 +914,20 @@ chrome.runtime.onMessage.addListener(function onExtensionMessage(message, _sende
   }
 
   if (message.type === 'FETCH_AND_FORMAT_AUDIT') {
-    const { entityLogicalName, entitySetName, guids } = message.payload ?? {};
+    let { entityLogicalName, entitySetName, guids } = message.payload ?? {};
     if (
       typeof entityLogicalName !== 'string' ||
-      typeof entitySetName     !== 'string' ||
       !Array.isArray(guids) || guids.length === 0
     ) {
-      sendResponse({ ok: false, error: 'Invalid payload: entityLogicalName, entitySetName (strings) and guids (array) are required.' });
+      sendResponse({ ok: false, error: 'Invalid payload: entityLogicalName (string) and guids (array) are required.' });
       return false;
     }
 
     (async () => {
+      // Auto-resolve entitySetName from metadata if the caller didn't provide it.
+      if (typeof entitySetName !== 'string') {
+        entitySetName = await resolveEntitySetName(entityLogicalName);
+      }
       const rawResults = await fetchAuditHistoryBatch(entitySetName, guids);
       const allRows    = [];
 
@@ -895,6 +959,76 @@ chrome.runtime.onMessage.addListener(function onExtensionMessage(message, _sende
     sendResponse({ ok: true, alive: true });
     return false;
   }
+});
+
+// ── Port-based audit export with streaming progress ───────────────────────────
+//
+// The popup opens a named port ("audit-export") and sends all GUIDs at once.
+// This handler runs them through the concurrency pool while posting incremental
+// progress messages back through the port so the popup can update a progress bar.
+
+chrome.runtime.onConnect.addListener(function onPortConnect(port) {
+  if (port.name !== 'audit-export') return;
+
+  port.onMessage.addListener(async function onPortMessage(msg) {
+    const { entityLogicalName, guids } = msg ?? {};
+    if (typeof entityLogicalName !== 'string' || !Array.isArray(guids) || guids.length === 0) {
+      port.postMessage({ type: 'error', error: 'Invalid payload.' });
+      return;
+    }
+
+    try {
+      // Resolve entity set name once.
+      let entitySetName;
+      try {
+        entitySetName = await resolveEntitySetName(entityLogicalName);
+      } catch (err) {
+        port.postMessage({ type: 'error', error: err.message });
+        return;
+      }
+
+      const total  = guids.length;
+      let   done   = 0;
+      const allRows = [];
+
+      // Build task factories for the pool — each task posts progress on completion.
+      const tasks = guids.map(guid => async () => {
+        let result;
+        try {
+          result = await fetchAuditHistoryForRecord(entitySetName, guid);
+        } catch (err) {
+          const status = err instanceof ApiError ? err.status : undefined;
+          let errorMsg = err.message ?? String(err);
+          if (status === 403) {
+            errorMsg = 'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+          } else if (status === 404) {
+            errorMsg = 'Record not found \u2014 it may have been deleted.';
+          }
+          result = { guid, entitySetName, error: errorMsg, status };
+        }
+
+        if (result.error) {
+          allRows.push({
+            RecordID: result.guid, ChangedBy: '', ChangedDate: '',
+            Operation: 'FETCH_ERROR', FieldName: '', OldValue: '',
+            NewValue: result.error,
+          });
+        } else {
+          const rows = await formatAuditResults(result.guid, entityLogicalName, result.data);
+          allRows.push(...rows);
+        }
+
+        done++;
+        try { port.postMessage({ type: 'progress', done, total }); } catch { /* port closed */ }
+        return result;
+      });
+
+      await runPool(tasks, MAX_CONCURRENT);
+      port.postMessage({ type: 'done', rows: allRows });
+    } catch (err) {
+      try { port.postMessage({ type: 'error', error: err.message ?? String(err) }); } catch { /* port closed */ }
+    }
+  });
 });
 
 // ── Initialisation ────────────────────────────────────────────────────────────

@@ -92,3 +92,85 @@ body {
   font-size: 10px;
   color: var(--color-muted);
 }
+
+/* ── Record info ─────────────────────────────────── */
+.record-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.record-info__count {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.record-info__entity {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+/* ── Buttons ─────────────────────────────────────── */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #106ebe;
+}
+
+.btn--primary:active:not(:disabled) {
+  background: #005a9e;
+}
+
+/* ── Progress ────────────────────────────────────── */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--color-surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  width: 0;
+  background: var(--color-accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 11px;
+  color: var(--color-muted);
+  text-align: center;
+}
