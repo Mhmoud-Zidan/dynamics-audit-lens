@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      CSP for the popup page. 'self' only — no inline scripts, no remote resources.
+      'unsafe-inline' is kept for styles only (required for dynamic highlight colours).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none';"
+    />
+    <title>Dynamics Audit Lens</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <img src="../../icons/icon48.png" alt="" class="header__logo" />
+        <h1 class="header__title">Dynamics Audit Lens</h1>
+      </header>
+
+      <main id="main-content" class="main">
+        <p id="status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+      </main>
+
+      <footer class="footer">
+        <span class="footer__note">All data stays in your browser.</span>
+      </footer>
+    </div>
+
+    <!-- Module script — processed by Vite / @crxjs -->
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

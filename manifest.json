@@ -1,0 +1,112 @@
+{
+  "manifest_version": 3,
+  "name": "Dynamics Audit Lens",
+  "short_name": "Audit Lens",
+  "version": "1.0.0",
+  "description": "Local-only audit and inspection tool for Microsoft Dynamics 365 / Dataverse. No data leaves your browser.",
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "Dynamics Audit Lens",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.crm.dynamics.com/*",
+        "*://*.crm2.dynamics.com/*",
+        "*://*.crm3.dynamics.com/*",
+        "*://*.crm4.dynamics.com/*",
+        "*://*.crm5.dynamics.com/*",
+        "*://*.crm6.dynamics.com/*",
+        "*://*.crm7.dynamics.com/*",
+        "*://*.crm8.dynamics.com/*",
+        "*://*.crm9.dynamics.com/*",
+        "*://*.crm11.dynamics.com/*",
+        "*://*.crm12.dynamics.com/*",
+        "*://*.crm15.dynamics.com/*",
+        "*://*.crm16.dynamics.com/*",
+        "*://*.crm17.dynamics.com/*",
+        "*://*.crm19.dynamics.com/*",
+        "*://*.crm20.dynamics.com/*"
+      ],
+      "js": ["src/content/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "*://*.crm.dynamics.com/*",
+    "*://*.crm2.dynamics.com/*",
+    "*://*.crm3.dynamics.com/*",
+    "*://*.crm4.dynamics.com/*",
+    "*://*.crm5.dynamics.com/*",
+    "*://*.crm6.dynamics.com/*",
+    "*://*.crm7.dynamics.com/*",
+    "*://*.crm8.dynamics.com/*",
+    "*://*.crm9.dynamics.com/*",
+    "*://*.crm11.dynamics.com/*",
+    "*://*.crm12.dynamics.com/*",
+    "*://*.crm15.dynamics.com/*",
+    "*://*.crm16.dynamics.com/*",
+    "*://*.crm17.dynamics.com/*",
+    "*://*.crm19.dynamics.com/*",
+    "*://*.crm20.dynamics.com/*"
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["*://*.dynamics.com/*"]
+    },
+    {
+      "resources": ["src/inject/page-bridge.js"],
+      "matches": [
+        "*://*.crm.dynamics.com/*",
+        "*://*.crm2.dynamics.com/*",
+        "*://*.crm3.dynamics.com/*",
+        "*://*.crm4.dynamics.com/*",
+        "*://*.crm5.dynamics.com/*",
+        "*://*.crm6.dynamics.com/*",
+        "*://*.crm7.dynamics.com/*",
+        "*://*.crm8.dynamics.com/*",
+        "*://*.crm9.dynamics.com/*",
+        "*://*.crm11.dynamics.com/*",
+        "*://*.crm12.dynamics.com/*",
+        "*://*.crm15.dynamics.com/*",
+        "*://*.crm16.dynamics.com/*",
+        "*://*.crm17.dynamics.com/*",
+        "*://*.crm19.dynamics.com/*",
+        "*://*.crm20.dynamics.com/*"
+      ],
+      "use_dynamic_urls": false
+    }
+  ]
+}
