@@ -577,14 +577,21 @@ function assertEntityLogicalName(name) {
  *
  * Endpoint:
  *   GET [orgUri]/api/data/v9.2/EntityDefinitions(LogicalName='<entity>')
- *     ?$select=LogicalName,PrimaryIdAttribute
+ *     ?$select=LogicalName,PrimaryIdAttribute,EntitySetName
  *     &$expand=Attributes(
  *         $select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName;
- *         $expand=OptionSet($select=IsGlobal,Options,TrueOption,FalseOption)
+ *         $expand=
+ *           Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet($select=Options),
+ *           Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet($select=Options),
+ *           Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet($select=Options),
+ *           Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet($select=Options),
+ *           Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet($select=TrueOption,FalseOption)
  *       )
  *
- * The nested $expand on OptionSet retrieves inline option labels for
- * Picklist / Status / State / Boolean attributes without extra round-trips.
+ * OData type-cast segments are required because OptionSet is not a property of
+ * the base AttributeMetadata type — querying it without casting causes error
+ * 0x80060888 ("Could not find a property named 'OptionSet' on type
+ * 'Microsoft.Dynamics.CRM.AttributeMetadata'").
  * For attributes using a GlobalOptionSet the `OptionSet` property is still
  * populated with the resolved options by the server.
  *
@@ -599,9 +606,19 @@ async function fetchEntityMetadata(entityLogicalName) {
   }
 
   // Nested OData query options inside $expand use semicolons as separators.
+  // OptionSet is NOT a property of the base AttributeMetadata type — it only
+  // exists on derived types. We must use OData type-cast segments so the server
+  // can resolve the property correctly and doesn't return 0x80060888.
+  const optionSetExpands = [
+    "Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet($select=Options)",
+    "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet($select=Options)",
+    "Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet($select=Options)",
+    "Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet($select=Options)",
+    "Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet($select=TrueOption,FalseOption)",
+  ].join(",");
   const nestedOpts = [
     "$select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName",
-    "$expand=OptionSet($select=IsGlobal,Options,TrueOption,FalseOption)",
+    `$expand=${optionSetExpands}`,
   ].join(";");
 
   const url =
@@ -634,20 +651,32 @@ async function fetchEntityMetadata(entityLogicalName) {
     // ── Build integer → label map for option-set backed types ──────────────
     let options = null;
 
-    if (type === "Boolean" && attr.OptionSet) {
+    // With type-cast $expand the server returns OptionSet under a qualified key
+    // (e.g. "Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet").
+    // Fall back to the plain "OptionSet" key for forward-compatibility.
+    const optionSet =
+      attr["Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet"] ??
+      attr["Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet"] ??
+      attr["Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet"] ??
+      attr["Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet"] ??
+      attr["Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet"] ??
+      attr.OptionSet ??
+      null;
+
+    if (type === "Boolean" && optionSet) {
       // Boolean attributes use TrueOption / FalseOption, not an Options array.
       const trueLabel =
-        attr.OptionSet.TrueOption?.Label?.UserLocalizedLabel?.Label ?? "Yes";
+        optionSet.TrueOption?.Label?.UserLocalizedLabel?.Label ?? "Yes";
       const falseLabel =
-        attr.OptionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? "No";
+        optionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? "No";
       options = new Map([
         [1, trueLabel],
         [0, falseLabel],
       ]);
-    } else if (Array.isArray(attr.OptionSet?.Options)) {
+    } else if (Array.isArray(optionSet?.Options)) {
       // Picklist, State, Status — and GlobalOptionSets resolved inline by server.
       options = new Map();
-      for (const opt of attr.OptionSet.Options) {
+      for (const opt of optionSet.Options) {
         const label = opt.Label?.UserLocalizedLabel?.Label;
         if (label !== undefined && opt.Value !== undefined) {
           options.set(Number(opt.Value), String(label));
