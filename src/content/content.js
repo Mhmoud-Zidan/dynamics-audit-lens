@@ -227,6 +227,7 @@ const ODATA_HEADERS = Object.freeze({
   "OData-MaxVersion": "4.0",
   "OData-Version": "4.0",
   "Content-Type": "application/json; charset=utf-8",
+  Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"',
 });
 
 // ── GUID validation ───────────────────────────────────────────────────────────
@@ -420,10 +421,15 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
   assertEntitySetName(entitySetName);
   assertGuid(guid);
 
+  // Use the UNBOUND RetrieveRecordChangeHistory function with a Target parameter
+  // alias. The bound syntax (/{entitySetName}({guid})/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory())
+  // returns 404 on many Dataverse versions / configurations. The unbound form
+  // works consistently across all versions.
+  const target = `${entitySetName}(${guid})`;
   const baseUrl =
     `${getOrgUri()}/api/data/v${API_VERSION}` +
-    `/${entitySetName}(${encodeURIComponent(guid)})` +
-    `/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory()`;
+    `/RetrieveRecordChangeHistory(Target=@target)` +
+    `?@target={'@odata.id':'${target}'}`;
 
   // Follow @odata.nextLink pagination — RetrieveRecordChangeHistory can return
   // paginated results when audit history exceeds the server page size (~5 000).
@@ -535,6 +541,7 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
 /**
  * @typedef {object} EntityMeta
  * @property {string}              primaryId   Logical name of the PK attribute.
+ * @property {string|null}          primaryName Logical name of the primary name attribute.
  * @property {Map<string,AttrMeta>} attributes logicalName → AttrMeta.
  * @property {Map<number,string>}   byColumn   ColumnNumber → logicalName (for attributemask).
  */
@@ -542,6 +549,7 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
 /**
  * @typedef {object} FormattedAuditRow
  * @property {string} RecordID    GUID of the audited record.
+ * @property {string} RecordName  Primary name of the audited record.
  * @property {string} ChangedBy   Display name of the user who made the change.
  * @property {string} ChangedDate Localised date/time string.
  * @property {string} Operation   Human-readable operation (e.g. "Update").
@@ -646,7 +654,7 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   const attrUrl =
     `${entityBase}` +
-    `?$select=LogicalName,PrimaryIdAttribute,EntitySetName` +
+    `?$select=LogicalName,PrimaryIdAttribute,PrimaryNameAttribute,EntitySetName` +
     `&$expand=Attributes($select=LogicalName,DisplayName,AttributeType,ColumnNumber)`;
 
   // Fire all requests in parallel.
@@ -719,6 +727,7 @@ async function fetchEntityMetadata(entityLogicalName) {
   /** @type {EntityMeta} */
   const entityMeta = {
     primaryId: entityJson.PrimaryIdAttribute ?? `${entityLogicalName}id`,
+    primaryName: entityJson.PrimaryNameAttribute ?? null,
     entitySetName: entityJson.EntitySetName ?? null,
     attributes,
     byColumn,
@@ -748,6 +757,58 @@ async function resolveEntitySetName(entityLogicalName) {
     );
   }
   return meta.entitySetName;
+}
+
+// ── Record name fetcher ───────────────────────────────────────────────────────
+
+/**
+ * Fetch the primary name attribute value for a single record.
+ *
+ * @param {string} entitySetName       e.g. "accounts"
+ * @param {string} guid                Record GUID (bare, lowercase)
+ * @param {string|null} primaryNameAttr Logical name of the primary name attribute
+ * @returns {Promise<string>}          The display name, or "(unknown)" on failure
+ */
+async function fetchRecordName(entitySetName, guid, primaryNameAttr) {
+  if (!primaryNameAttr) return "(unknown)";
+  assertEntitySetName(entitySetName);
+  assertGuid(guid);
+
+  try {
+    const url =
+      `${getOrgUri()}/api/data/v${API_VERSION}` +
+      `/${entitySetName}(${guid})?$select=${primaryNameAttr}`;
+    const response = await fetchWithRetry(() =>
+      fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+    );
+    const json = await response.json();
+    const name = json[primaryNameAttr];
+    return typeof name === "string" && name ? name : "(unnamed)";
+  } catch {
+    return "(unknown)";
+  }
+}
+
+/**
+ * Batch-fetch primary name values for multiple GUIDs.
+ * Returns a Map<guid, name>.
+ *
+ * @param {string} entitySetName
+ * @param {string[]} guids
+ * @param {string|null} primaryNameAttr
+ * @returns {Promise<Map<string,string>>}
+ */
+async function fetchRecordNames(entitySetName, guids, primaryNameAttr) {
+  /** @type {Map<string,string>} */
+  const nameMap = new Map();
+  if (!primaryNameAttr || !guids.length) return nameMap;
+
+  const tasks = guids.map((guid) => async () => {
+    const name = await fetchRecordName(entitySetName, guid, primaryNameAttr);
+    nameMap.set(guid, name);
+  });
+  await runPool(tasks, MAX_CONCURRENT);
+  return nameMap;
 }
 
 // ── AttributeMask decoder ─────────────────────────────────────────────────────
@@ -790,6 +851,18 @@ function parseAttributeMask(attributemask, byColumn) {
 
 /** OData formatted-value annotation suffix added by Dataverse. */
 const FORMATTED_SUFFIX = "@OData.Community.Display.V1.FormattedValue";
+
+/**
+ * Dataverse Audit entity OperationType option set values → human-readable labels.
+ * Used as a fallback when the server does not return formatted annotations.
+ */
+const OPERATION_MAP = new Map([
+  [1, "Create"],
+  [2, "Update"],
+  [3, "Delete"],
+  [4, "Access"],
+  [5, "Upsert"],
+]);
 
 /**
  * Resolve a single attribute value to a human-readable string.
@@ -872,9 +945,10 @@ function resolveFieldValue(logicalName, value, container, attrMeta) {
  * @param {string} guid               The GUID of the audited record.
  * @param {string} entityLogicalName  Entity logical name, e.g. "account".
  * @param {object} rawAuditData       Parsed JSON body from the API response.
+ * @param {string} recordName         Display name of the record.
  * @returns {Promise<FormattedAuditRow[]>}
  */
-async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
+async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordName) {
   assertGuid(guid);
   assertEntityLogicalName(entityLogicalName);
 
@@ -885,12 +959,42 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
   } catch {
     entityMeta = {
       primaryId: `${entityLogicalName}id`,
+      primaryName: null,
       entitySetName: null,
       attributes: new Map(),
       byColumn: new Map(),
     };
   }
   const auditDetails = rawAuditData?.AuditDetailCollection?.AuditDetails ?? [];
+
+  // ── Resolve user display names ──────────────────────────────────────────
+  // Collect unique user GUIDs from all audit records so we can batch-fetch
+  // their display names from systemusers (in case formatted annotations
+  // are not returned by RetrieveRecordChangeHistory).
+  const userGuidSet = new Set();
+  for (const detail of auditDetails) {
+    const uid = detail.AuditRecord?.["_userid_value"];
+    if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
+      userGuidSet.add(uid.toLowerCase());
+    }
+  }
+  /** @type {Map<string,string>} */
+  const userNameMap = new Map();
+  if (userGuidSet.size > 0) {
+    const userTasks = [...userGuidSet].map((uid) => async () => {
+      try {
+        const url =
+          `${getOrgUri()}/api/data/v${API_VERSION}` +
+          `/systemusers(${uid})?$select=fullname`;
+        const resp = await fetchWithRetry(() =>
+          fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+        );
+        const json = await resp.json();
+        if (json.fullname) userNameMap.set(uid, json.fullname);
+      } catch { /* best-effort */ }
+    });
+    await runPool(userTasks, MAX_CONCURRENT);
+  }
 
   /** @type {FormattedAuditRow[]} */
   const rows = [];
@@ -901,9 +1005,11 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
     const newValue = detail.NewValue ?? {};
 
     // ── Provenance ──────────────────────────────────────────────────────────
+    const userId = auditRecord["_userid_value"];
     const changedBy = String(
       auditRecord[`_userid_value${FORMATTED_SUFFIX}`] ??
-        auditRecord["_userid_value"] ??
+        (typeof userId === "string" ? userNameMap.get(userId.toLowerCase()) : undefined) ??
+        userId ??
         "(unknown user)",
     );
 
@@ -915,11 +1021,11 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
         })
       : "(unknown date)";
 
-    const operation = String(
+    const rawOp =
       auditRecord[`operation${FORMATTED_SUFFIX}`] ??
-        auditRecord.operation ??
-        "",
-    );
+      auditRecord.operation ??
+      "";
+    const operation = OPERATION_MAP.get(Number(rawOp)) ?? String(rawOp);
 
     // ── Determine changed fields ────────────────────────────────────────────
     // Primary: decode attributemask (ColumnNumber-based, most authoritative).
@@ -962,6 +1068,7 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
 
       rows.push({
         RecordID: guid,
+        RecordName: recordName ?? "",
         ChangedBy: changedBy,
         ChangedDate: changedDate,
         Operation: operation,
@@ -1059,14 +1166,22 @@ chrome.runtime.onMessage.addListener(
         if (typeof entitySetName !== "string") {
           entitySetName = await resolveEntitySetName(entityLogicalName);
         }
-        const rawResults = await fetchAuditHistoryBatch(entitySetName, guids);
+
+        // Fetch record names in parallel with audit data.
+        const meta = await fetchEntityMetadata(entityLogicalName);
+        const [rawResults, nameMap] = await Promise.all([
+          fetchAuditHistoryBatch(entitySetName, guids),
+          fetchRecordNames(entitySetName, guids, meta.primaryName),
+        ]);
         const allRows = [];
 
         for (const result of rawResults) {
+          const recordName = nameMap.get(result.guid) ?? "";
           if (result.error) {
             // Surface per-record fetch failures as sentinel rows.
             allRows.push({
               RecordID: result.guid,
+              RecordName: recordName,
               ChangedBy: "",
               ChangedDate: "",
               Operation: "FETCH_ERROR",
@@ -1080,6 +1195,7 @@ chrome.runtime.onMessage.addListener(
             result.guid,
             entityLogicalName,
             result.data,
+            recordName,
           );
           allRows.push(...rows);
         }
@@ -1135,6 +1251,10 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
         return;
       }
 
+      // Pre-fetch record names so they can be included in every row.
+      const meta = await fetchEntityMetadata(entityLogicalName);
+      const nameMap = await fetchRecordNames(entitySetName, guids, meta.primaryName);
+
       const total = guids.length;
       let done = 0;
       const allRows = [];
@@ -1164,6 +1284,7 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
         if (result.error) {
           allRows.push({
             RecordID: result.guid,
+            RecordName: nameMap.get(result.guid) ?? "",
             ChangedBy: "",
             ChangedDate: "",
             Operation: "FETCH_ERROR",
@@ -1177,6 +1298,7 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
               result.guid,
               entityLogicalName,
               result.data,
+              nameMap.get(result.guid) ?? "",
             );
             // C3 fix: enforce row cap at the source to prevent tab OOM.
             if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
@@ -1189,6 +1311,7 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
           } catch (fmtErr) {
             allRows.push({
               RecordID: result.guid,
+              RecordName: nameMap.get(result.guid) ?? "",
               ChangedBy: "",
               ChangedDate: "",
               Operation: "FORMAT_ERROR",
