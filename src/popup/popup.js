@@ -81,7 +81,7 @@ function generateExcel(rows, entityName) {
     });
 
     // Enable auto-filter dropdowns on all header columns.
-    ws["!autofilter"] = { ref: XLSX.utils.encode_range(ws["!ref"]) };
+    ws["!autofilter"] = { ref: ws["!ref"] };
   }
 
   const safeName = String(entityName ?? "Unknown").replace(
