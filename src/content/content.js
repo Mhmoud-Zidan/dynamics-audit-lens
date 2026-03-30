@@ -575,25 +575,21 @@ function assertEntityLogicalName(name) {
 /**
  * Fetch (and cache) entity attribute metadata from the Dataverse Metadata API.
  *
- * Endpoint:
- *   GET [orgUri]/api/data/v9.2/EntityDefinitions(LogicalName='<entity>')
- *     ?$select=LogicalName,PrimaryIdAttribute,EntitySetName
- *     &$expand=Attributes(
- *         $select=LogicalName,DisplayName,AttributeType,ColumnNumber;
- *         $expand=
- *           Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet($select=Options),
- *           Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet($select=Options),
- *           Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet($select=Options),
- *           Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet($select=Options),
- *           Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet($select=TrueOption,FalseOption)
- *       )
+ * Dataverse forbids multi-level $expand (expanding OptionSet inside Attributes
+ * causes 0x80060888 or "Multiple levels of expansion aren't supported").
+ * The workaround is two parallel request groups:
  *
- * OData type-cast segments are required because OptionSet is not a property of
- * the base AttributeMetadata type — querying it without casting causes error
- * 0x80060888 ("Could not find a property named 'OptionSet' on type
- * 'Microsoft.Dynamics.CRM.AttributeMetadata'").
- * For attributes using a GlobalOptionSet the `OptionSet` property is still
- * populated with the resolved options by the server.
+ *   Request 1 — base attribute list (no nested expand):
+ *     GET EntityDefinitions(LogicalName='<entity>')
+ *       ?$select=LogicalName,PrimaryIdAttribute,EntitySetName
+ *       &$expand=Attributes($select=LogicalName,DisplayName,AttributeType,ColumnNumber)
+ *
+ *   Requests 2-5 (parallel) — typed path-cast requests; each supports one level
+ *   of $expand because OptionSet IS a property of the cast type's own schema:
+ *     GET EntityDefinitions(LogicalName='<entity>')/Attributes
+ *           /Microsoft.Dynamics.CRM.PicklistAttributeMetadata
+ *           ?$select=LogicalName&$expand=OptionSet($select=Options)
+ *     (…same pattern for MultiSelectPicklist, Status, State, Boolean)
  *
  * @param {string} entityLogicalName  e.g. "account"
  * @returns {Promise<EntityMeta>}
@@ -605,42 +601,81 @@ async function fetchEntityMetadata(entityLogicalName) {
     return metadataCache.get(entityLogicalName);
   }
 
-  // Nested OData query options inside $expand use semicolons as separators.
-  // OptionSet is NOT a property of the base AttributeMetadata type — it only
-  // exists on derived types. We must use OData type-cast segments so the server
-  // can resolve the property correctly and doesn't return 0x80060888.
-  const optionSetExpands = [
-    "Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet($select=Options)",
-    "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet($select=Options)",
-    "Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet($select=Options)",
-    "Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet($select=Options)",
-    "Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet($select=TrueOption,FalseOption)",
-  ].join(",");
-  const nestedOpts = [
-    "$select=LogicalName,DisplayName,AttributeType,ColumnNumber",
-    `$expand=${optionSetExpands}`,
-  ].join(";");
+  const baseUrl = `${getOrgUri()}/api/data/v${API_VERSION}`;
+  const entityBase =
+    `${baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')`;
 
-  const url =
-    `${getOrgUri()}/api/data/v${API_VERSION}` +
-    `/EntityDefinitions(LogicalName='${entityLogicalName}')` +
+  // Helper: fire a GET and return parsed JSON, falling back to {} on error
+  // so a missing cast type (e.g. entity has no picklist attrs) doesn't abort.
+  const getJson = (url) =>
+    fetchWithRetry(() =>
+      fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+    )
+      .then((r) => r.json())
+      .catch(() => ({}));
+
+  // Typed attribute requests — each is a flat, single-level expand that
+  // Dataverse accepts without error.
+  const OPTION_TYPES = [
+    {
+      cast: "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+      expandSelect: "Options",
+      isBool: false,
+    },
+    {
+      cast: "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata",
+      expandSelect: "Options",
+      isBool: false,
+    },
+    {
+      cast: "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+      expandSelect: "Options",
+      isBool: false,
+    },
+    {
+      cast: "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+      expandSelect: "Options",
+      isBool: false,
+    },
+    {
+      cast: "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+      expandSelect: "TrueOption,FalseOption",
+      isBool: true,
+    },
+  ];
+
+  const attrUrl =
+    `${entityBase}` +
     `?$select=LogicalName,PrimaryIdAttribute,EntitySetName` +
-    `&$expand=Attributes(${nestedOpts})`;
+    `&$expand=Attributes($select=LogicalName,DisplayName,AttributeType,ColumnNumber)`;
 
-  const response = await fetchWithRetry(() =>
-    fetch(url, {
-      method: "GET",
-      credentials: "include",
-      headers: ODATA_HEADERS,
-    }),
-  );
+  // Fire all requests in parallel.
+  const [entityJson, ...optionResults] = await Promise.all([
+    getJson(attrUrl),
+    ...OPTION_TYPES.map(({ cast, expandSelect }) =>
+      getJson(
+        `${entityBase}/Attributes/${cast}` +
+          `?$select=LogicalName&$expand=OptionSet($select=${expandSelect})`,
+      ),
+    ),
+  ]);
 
-  const json = await response.json();
+  // Build logicalName → { optionSet, isBool } from the typed results.
+  /** @type {Map<string, { optionSet: object, isBool: boolean }>} */
+  const optionSetByName = new Map();
+  optionResults.forEach((result, i) => {
+    const { isBool } = OPTION_TYPES[i];
+    for (const attr of result.value ?? []) {
+      if (typeof attr.LogicalName === "string" && attr.OptionSet) {
+        optionSetByName.set(attr.LogicalName, { optionSet: attr.OptionSet, isBool });
+      }
+    }
+  });
 
   const attributes = new Map(); // logicalName → AttrMeta
   const byColumn = new Map(); // ColumnNumber → logicalName
 
-  for (const attr of json.Attributes ?? []) {
+  for (const attr of entityJson.Attributes ?? []) {
     const logicalName = attr.LogicalName;
     if (typeof logicalName !== "string") continue;
 
@@ -650,36 +685,24 @@ async function fetchEntityMetadata(entityLogicalName) {
 
     // ── Build integer → label map for option-set backed types ──────────────
     let options = null;
-
-    // With type-cast $expand the server returns OptionSet under a qualified key
-    // (e.g. "Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet").
-    // Fall back to the plain "OptionSet" key for forward-compatibility.
-    const optionSet =
-      attr["Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet"] ??
-      attr["Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet"] ??
-      attr["Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet"] ??
-      attr["Microsoft.Dynamics.CRM.StatusAttributeMetadata/OptionSet"] ??
-      attr["Microsoft.Dynamics.CRM.StateAttributeMetadata/OptionSet"] ??
-      attr.OptionSet ??
-      null;
-
-    if (type === "Boolean" && optionSet) {
-      // Boolean attributes use TrueOption / FalseOption, not an Options array.
-      const trueLabel =
-        optionSet.TrueOption?.Label?.UserLocalizedLabel?.Label ?? "Yes";
-      const falseLabel =
-        optionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? "No";
-      options = new Map([
-        [1, trueLabel],
-        [0, falseLabel],
-      ]);
-    } else if (Array.isArray(optionSet?.Options)) {
-      // Picklist, State, Status — and GlobalOptionSets resolved inline by server.
-      options = new Map();
-      for (const opt of optionSet.Options) {
-        const label = opt.Label?.UserLocalizedLabel?.Label;
-        if (label !== undefined && opt.Value !== undefined) {
-          options.set(Number(opt.Value), String(label));
+    const optData = optionSetByName.get(logicalName);
+    if (optData) {
+      if (optData.isBool) {
+        const trueLabel =
+          optData.optionSet.TrueOption?.Label?.UserLocalizedLabel?.Label ?? "Yes";
+        const falseLabel =
+          optData.optionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? "No";
+        options = new Map([
+          [1, trueLabel],
+          [0, falseLabel],
+        ]);
+      } else if (Array.isArray(optData.optionSet.Options)) {
+        options = new Map();
+        for (const opt of optData.optionSet.Options) {
+          const label = opt.Label?.UserLocalizedLabel?.Label;
+          if (label !== undefined && opt.Value !== undefined) {
+            options.set(Number(opt.Value), String(label));
+          }
         }
       }
     }
@@ -695,8 +718,8 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   /** @type {EntityMeta} */
   const entityMeta = {
-    primaryId: json.PrimaryIdAttribute ?? `${entityLogicalName}id`,
-    entitySetName: json.EntitySetName ?? null,
+    primaryId: entityJson.PrimaryIdAttribute ?? `${entityLogicalName}id`,
+    entitySetName: entityJson.EntitySetName ?? null,
     attributes,
     byColumn,
   };
