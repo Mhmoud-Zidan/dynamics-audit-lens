@@ -27,12 +27,12 @@
  */
 
 (function dynamicsAuditLensBridge() {
-  'use strict';
+  "use strict";
 
   // ── Message type constants ───────────────────────────────────────────────
-  const T_READY    = '__DAL__BRIDGE_READY';
-  const T_REQUEST  = '__DAL__CONTEXT_REQUEST';
-  const T_RESPONSE = '__DAL__CONTEXT_RESPONSE';
+  const T_READY = "__DAL__BRIDGE_READY";
+  const T_REQUEST = "__DAL__CONTEXT_REQUEST";
+  const T_RESPONSE = "__DAL__CONTEXT_RESPONSE";
 
   // Target origin for outbound postMessage — always the page's own origin.
   // Dynamics 365 is always HTTPS so this is well-defined.
@@ -43,13 +43,14 @@
   /** Strip curly braces and lowercase a raw Dynamics GUID string. */
   function normaliseGuid(raw) {
     if (!raw) return null;
-    return raw.replace(/[{}]/g, '').toLowerCase();
+    return raw.replace(/[{}]/g, "").toLowerCase();
   }
 
   /** Validate a string is a well-formed GUID. Rejects attacker-controlled junk. */
-  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const GUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function isGuid(s) {
-    return typeof s === 'string' && GUID_RE.test(s);
+    return typeof s === "string" && GUID_RE.test(s);
   }
 
   // ── Xrm context readers ──────────────────────────────────────────────────
@@ -66,9 +67,11 @@
 
       const entityId = normaliseGuid(input.entityId);
       return {
-        pageType:   String(input.pageType  ?? 'unknown').slice(0, 64),
-        entityName: input.entityName ? String(input.entityName).slice(0, 128) : null,
-        entityId:   isGuid(entityId) ? entityId : null,
+        pageType: String(input.pageType ?? "unknown").slice(0, 64),
+        entityName: input.entityName
+          ? String(input.entityName).slice(0, 128)
+          : null,
+        entityId: isGuid(entityId) ? entityId : null,
       };
     } catch {
       return null;
@@ -84,15 +87,15 @@
       const entity = window.Xrm?.Page?.data?.entity;
       if (!entity) return null;
 
-      const rawId   = entity.getId?.();
+      const rawId = entity.getId?.();
       const rawName = entity.getEntityName?.();
       if (!rawId && !rawName) return null;
 
       const entityId = normaliseGuid(rawId);
       return {
-        pageType:   'entityrecord',
+        pageType: "entityrecord",
         entityName: rawName ? String(rawName).slice(0, 128) : null,
-        entityId:   isGuid(entityId) ? entityId : null,
+        entityId: isGuid(entityId) ? entityId : null,
       };
     } catch {
       return null;
@@ -117,11 +120,12 @@
     try {
       // UCI renders the main grid as an ag-grid; rows carry row-id or data-id.
       const candidates = document.querySelectorAll(
-        '[aria-selected="true"][data-id], [aria-selected="true"][row-id]'
+        '[aria-selected="true"][data-id], [aria-selected="true"][row-id]',
       );
       const ids = [];
-      candidates.forEach(el => {
-        const raw  = el.getAttribute('data-id') || el.getAttribute('row-id') || '';
+      candidates.forEach((el) => {
+        const raw =
+          el.getAttribute("data-id") || el.getAttribute("row-id") || "";
         const guid = normaliseGuid(raw);
         if (isGuid(guid) && !ids.includes(guid)) {
           ids.push(guid);
@@ -141,13 +145,13 @@
     try {
       const controls = window.Xrm?.Page?.controls?.get?.() ?? [];
       const ids = [];
-      controls.forEach(ctrl => {
+      controls.forEach((ctrl) => {
         const type = ctrl.getControlType?.();
-        if (type !== 'subgrid') return;
+        if (type !== "subgrid") return;
         const grid = ctrl.getGrid?.();
         const rows = grid?.getSelectedRows?.();
-        rows?.getAll?.().forEach(row => {
-          const raw  = row.getData?.()?.entity?.getId?.();
+        rows?.getAll?.().forEach((row) => {
+          const raw = row.getData?.()?.entity?.getId?.();
           const guid = normaliseGuid(raw);
           if (isGuid(guid) && !ids.includes(guid)) {
             ids.push(guid);
@@ -165,10 +169,10 @@
   function collectContext() {
     if (!window.Xrm) {
       return {
-        available:   false,
-        pageType:    null,
-        entityName:  null,
-        entityId:    null,
+        available: false,
+        pageType: null,
+        entityName: null,
+        entityId: null,
         selectedIds: [],
       };
     }
@@ -178,38 +182,40 @@
 
     if (!base) {
       return {
-        available:   true,
-        pageType:    'unknown',
-        entityName:  null,
-        entityId:    null,
+        available: true,
+        pageType: "unknown",
+        entityName: null,
+        entityId: null,
         selectedIds: [],
       };
     }
 
     let selectedIds = [];
 
-    if (base.pageType === 'entityrecord') {
+    if (base.pageType === "entityrecord") {
       // Form — selected "record" is the open record itself, plus any subgrid selections
       if (base.entityId) selectedIds = [base.entityId];
       const sub = readSubgridSelectedIds();
-      sub.forEach(id => { if (!selectedIds.includes(id)) selectedIds.push(id); });
-
-    } else if (base.pageType === 'entitylist') {
+      sub.forEach((id) => {
+        if (!selectedIds.includes(id)) selectedIds.push(id);
+      });
+    } else if (base.pageType === "entitylist") {
       // List / grid view — collect ARIA-selected row IDs
       selectedIds = readSelectedGridIds();
     }
 
     // Flag when we're on a list page but couldn't detect any selection method.
     // This helps the popup warn the user instead of silently showing "0 selected".
-    const selectionUnavailable = base.pageType === 'entitylist'
-      && selectedIds.length === 0
-      && document.querySelectorAll('[aria-selected="true"]').length > 0;
+    const selectionUnavailable =
+      base.pageType === "entitylist" &&
+      selectedIds.length === 0 &&
+      document.querySelectorAll('[aria-selected="true"]').length > 0;
 
     return {
-      available:   true,
-      pageType:    base.pageType,
-      entityName:  base.entityName,
-      entityId:    base.entityId,
+      available: true,
+      pageType: base.pageType,
+      entityName: base.entityName,
+      entityId: base.entityId,
       selectedIds,
       selectionUnavailable,
     };
@@ -217,7 +223,7 @@
 
   // ── Message handler ──────────────────────────────────────────────────────
 
-  window.addEventListener('message', function handleBridgeRequest(event) {
+  window.addEventListener("message", function handleBridgeRequest(event) {
     // Only accept messages originating from the same window.
     // (Cross-origin iframes will have a different event.source.)
     if (event.source !== window) return;
@@ -232,7 +238,6 @@
   // without waiting for an explicit request.
   window.postMessage(
     { type: T_READY, payload: collectContext() },
-    TARGET_ORIGIN
+    TARGET_ORIGIN,
   );
-
 })();

@@ -12,13 +12,13 @@
  *  - Message origins are validated against the extension's own ID.
  */
 
-'use strict';
+"use strict";
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   if (reason === chrome.runtime.OnInstalledReason.INSTALL) {
-    console.debug('[Audit Lens] Extension installed.');
+    console.debug("[Audit Lens] Extension installed.");
     // Initialise default storage schema (no external calls).
     chrome.storage.local.set({ sessions: [], settings: { enabled: true } });
   }
@@ -40,24 +40,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false;
 
   switch (message.type) {
-    case 'DYNAMICS_PAGE_ACTIVE':
+    case "DYNAMICS_PAGE_ACTIVE":
       handleDynamicsPageActive(message.payload, sender.tab);
       sendResponse({ ok: true });
       break;
 
-    case 'DYNAMICS_CONTEXT_UPDATE':
+    case "DYNAMICS_CONTEXT_UPDATE":
       handleContextUpdate(message.payload, sender.tab);
       sendResponse({ ok: true });
       break;
 
-    case 'GET_SESSIONS':
-      chrome.storage.local.get('sessions', ({ sessions }) => {
+    case "GET_SESSIONS":
+      chrome.storage.local.get("sessions", ({ sessions }) => {
         sendResponse({ sessions: sessions ?? [] });
       });
       return true; // Keep message channel open for async response.
 
     default:
-      console.warn('[Audit Lens] Unknown message type:', message.type);
+      console.warn("[Audit Lens] Unknown message type:", message.type);
   }
 
   return false;
@@ -75,20 +75,20 @@ function handleDynamicsPageActive(payload, tab) {
   if (!payload?.hostname) return;
 
   const record = {
-    hostname:  String(payload.hostname).slice(0, 253),
-    pathname:  String(payload.pathname).slice(0, 2000),
-    title:     String(payload.title).slice(0, 200),
+    hostname: String(payload.hostname).slice(0, 253),
+    pathname: String(payload.pathname).slice(0, 2000),
+    title: String(payload.title).slice(0, 200),
     timestamp: Date.now(),
   };
 
-  chrome.storage.local.get('sessions', ({ sessions }) => {
+  chrome.storage.local.get("sessions", ({ sessions }) => {
     const updated = [record, ...(sessions ?? [])].slice(0, 500);
     chrome.storage.local.set({ sessions: updated });
   });
 
   if (tab?.id != null) {
-    chrome.action.setBadgeText({ text: '●', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#4caf7d', tabId: tab.id });
+    chrome.action.setBadgeText({ text: "●", tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ color: "#4caf7d", tabId: tab.id });
   }
 }
 
@@ -106,27 +106,27 @@ function handleContextUpdate(payload, tab) {
 
   // Sanitise: only store known scalar fields from the Xrm context.
   const record = {
-    hostname:    String(payload.hostname).slice(0, 253),
-    pathname:    String(payload.pathname).slice(0, 2000),
-    title:       String(payload.title ?? '').slice(0, 200),
-    pageType:    ctx.pageType    ? String(ctx.pageType).slice(0, 64)    : null,
-    entityName:  ctx.entityName  ? String(ctx.entityName).slice(0, 128) : null,
-    entityId:    ctx.entityId    ? String(ctx.entityId).slice(0, 36)    : null,
+    hostname: String(payload.hostname).slice(0, 253),
+    pathname: String(payload.pathname).slice(0, 2000),
+    title: String(payload.title ?? "").slice(0, 200),
+    pageType: ctx.pageType ? String(ctx.pageType).slice(0, 64) : null,
+    entityName: ctx.entityName ? String(ctx.entityName).slice(0, 128) : null,
+    entityId: ctx.entityId ? String(ctx.entityId).slice(0, 36) : null,
     selectedIds: Array.isArray(ctx.selectedIds)
-      ? ctx.selectedIds.slice(0, 250).map(id => String(id).slice(0, 36))
+      ? ctx.selectedIds.slice(0, 250).map((id) => String(id).slice(0, 36))
       : [],
-    timestamp:   Date.now(),
+    timestamp: Date.now(),
   };
 
-  chrome.storage.local.get('sessions', ({ sessions }) => {
+  chrome.storage.local.get("sessions", ({ sessions }) => {
     const updated = [record, ...(sessions ?? [])].slice(0, 500);
     chrome.storage.local.set({ sessions: updated });
   });
 
   // Update badge colour: blue for a form (single record), green for a list.
   if (tab?.id != null) {
-    const colour = record.pageType === 'entityrecord' ? '#0078d4' : '#4caf7d';
-    chrome.action.setBadgeText({ text: '●', tabId: tab.id });
+    const colour = record.pageType === "entityrecord" ? "#0078d4" : "#4caf7d";
+    chrome.action.setBadgeText({ text: "●", tabId: tab.id });
     chrome.action.setBadgeBackgroundColor({ color: colour, tabId: tab.id });
   }
 }

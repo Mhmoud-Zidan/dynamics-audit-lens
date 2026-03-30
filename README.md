@@ -66,14 +66,14 @@ Then run `npm run build` again and reload the extension.
 
 ## Security design
 
-| Concern | Mitigation |
-|---|---|
-| Data exfiltration | `connect-src 'self'` in CSP; no `fetch`/XHR to external origins in any script |
+| Concern              | Mitigation                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| Data exfiltration    | `connect-src 'self'` in CSP; no `fetch`/XHR to external origins in any script                |
 | XSS via page content | Content script uses `.textContent` only, never `innerHTML`; data is sanitised before storage |
-| Script injection | `script-src 'self'` — no `eval`, no remote scripts |
-| Double-injection | IIFE guard with `Object.defineProperty` (non-writable) on `window` |
-| Message spoofing | Service worker validates `sender.id === chrome.runtime.id` before processing messages |
-| Storage overflow | Session list capped at 500 entries in the service worker |
+| Script injection     | `script-src 'self'` — no `eval`, no remote scripts                                           |
+| Double-injection     | IIFE guard with `Object.defineProperty` (non-writable) on `window`                           |
+| Message spoofing     | Service worker validates `sender.id === chrome.runtime.id` before processing messages        |
+| Storage overflow     | Session list capped at 500 entries in the service worker                                     |
 
 ---
 

@@ -30,25 +30,28 @@
  *  • No data is sent to any external server.
  */
 
-'use strict';
+"use strict";
 
 // ── Guard against double injection ────────────────────────────────────────────
 // Uses a module-scoped closure variable instead of a window property to prevent
 // a hostile page script from pre-setting the flag and silently disabling us.
 {
-  const key = Symbol.for('__dalContentV1');
+  const key = Symbol.for("__dalContentV1");
   if (globalThis[key]) {
-    throw new Error('DAL: content script already active');
+    throw new Error("DAL: content script already active");
   }
   Object.defineProperty(globalThis, key, {
-    value: true, writable: false, configurable: false, enumerable: false,
+    value: true,
+    writable: false,
+    configurable: false,
+    enumerable: false,
   });
 }
 
 // ── Message type constants ────────────────────────────────────────────────────
-const T_READY    = '__DAL__BRIDGE_READY';
-const T_REQUEST  = '__DAL__CONTEXT_REQUEST';
-const T_RESPONSE = '__DAL__CONTEXT_RESPONSE';
+const T_READY = "__DAL__BRIDGE_READY";
+const T_REQUEST = "__DAL__CONTEXT_REQUEST";
+const T_RESPONSE = "__DAL__CONTEXT_RESPONSE";
 
 /**
  * The origin we expect on all postMessages from the bridge.
@@ -57,7 +60,7 @@ const T_RESPONSE = '__DAL__CONTEXT_RESPONSE';
  */
 const EXPECTED_ORIGIN = (() => {
   const o = window.location.origin;
-  return o && o !== 'null' ? o : null;
+  return o && o !== "null" ? o : null;
 })();
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -83,23 +86,27 @@ function injectBridge() {
   bridgeInjected = true;
 
   try {
-    const script       = document.createElement('script');
-    script.src        = chrome.runtime.getURL('src/inject/page-bridge.js');
-    script.type       = 'text/javascript';
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL("src/inject/page-bridge.js");
+    script.type = "text/javascript";
 
     const parent = document.head ?? document.documentElement;
     parent.appendChild(script);
 
-    script.addEventListener('load',  () => script.remove(), { once: true });
-    script.addEventListener('error', () => {
-      console.warn(
-        '[Audit Lens] Bridge script blocked by page CSP. ' +
-        'Xrm context detection is unavailable on this page.'
-      );
-      script.remove();
-    }, { once: true });
+    script.addEventListener("load", () => script.remove(), { once: true });
+    script.addEventListener(
+      "error",
+      () => {
+        console.warn(
+          "[Audit Lens] Bridge script blocked by page CSP. " +
+            "Xrm context detection is unavailable on this page.",
+        );
+        script.remove();
+      },
+      { once: true },
+    );
   } catch (err) {
-    console.error('[Audit Lens] Bridge injection failed:', err);
+    console.error("[Audit Lens] Bridge injection failed:", err);
   }
 }
 
@@ -112,7 +119,7 @@ const pendingRequests = [];
 
 // ── postMessage listener ──────────────────────────────────────────────────────
 
-window.addEventListener('message', function onBridgeMessage(event) {
+window.addEventListener("message", function onBridgeMessage(event) {
   // Reject messages from other windows or origins up-front.
   if (event.source !== window) return;
   if (!EXPECTED_ORIGIN || event.origin !== EXPECTED_ORIGIN) return;
@@ -140,15 +147,19 @@ window.addEventListener('message', function onBridgeMessage(event) {
 // ── Background notification ───────────────────────────────────────────────────
 
 function notifyBackground(context) {
-  chrome.runtime.sendMessage({
-    type: 'DYNAMICS_CONTEXT_UPDATE',
-    payload: {
-      hostname:  window.location.hostname,
-      pathname:  window.location.pathname,
-      title:     document.title.slice(0, 200),
-      context,
-    },
-  }).catch(() => { /* extension context may be invalidated; ignore */ });
+  chrome.runtime
+    .sendMessage({
+      type: "DYNAMICS_CONTEXT_UPDATE",
+      payload: {
+        hostname: window.location.hostname,
+        pathname: window.location.pathname,
+        title: document.title.slice(0, 200),
+        context,
+      },
+    })
+    .catch(() => {
+      /* extension context may be invalidated; ignore */
+    });
 }
 
 // ── Context request helper ────────────────────────────────────────────────────
@@ -160,14 +171,17 @@ function notifyBackground(context) {
  * @returns {Promise<object>}
  */
 function requestFreshContext() {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const FALLBACK_CONTEXT = {
-      available: false, pageType: null, entityName: null,
-      entityId: null, selectedIds: [],
+      available: false,
+      pageType: null,
+      entityName: null,
+      entityId: null,
+      selectedIds: [],
     };
 
     const timer = setTimeout(() => {
-      const idx = pendingRequests.findIndex(r => r.resolve === resolve);
+      const idx = pendingRequests.findIndex((r) => r.resolve === resolve);
       if (idx !== -1) pendingRequests.splice(idx, 1);
       resolve(cachedContext ?? FALLBACK_CONTEXT);
     }, 2000);
@@ -199,9 +213,9 @@ function requestFreshContext() {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const API_VERSION      = '9.2';
-const MAX_CONCURRENT   = 5;
-const MAX_EXPORT_ROWS  = 100_000;
+const API_VERSION = "9.2";
+const MAX_CONCURRENT = 5;
+const MAX_EXPORT_ROWS = 100_000;
 
 /**
  * Standard OData headers required by the Dataverse REST endpoint.
@@ -209,15 +223,16 @@ const MAX_EXPORT_ROWS  = 100_000;
  * `OData-MaxVersion` pins the protocol so future server upgrades don't break parsing.
  */
 const ODATA_HEADERS = Object.freeze({
-  'Accept':          'application/json; odata.metadata=minimal',
-  'OData-MaxVersion': '4.0',
-  'OData-Version':   '4.0',
-  'Content-Type':    'application/json; charset=utf-8',
+  Accept: "application/json; odata.metadata=minimal",
+  "OData-MaxVersion": "4.0",
+  "OData-Version": "4.0",
+  "Content-Type": "application/json; charset=utf-8",
 });
 
 // ── GUID validation ───────────────────────────────────────────────────────────
 
-const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const GUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Throw if the supplied value is not a well-formed GUID string.
@@ -228,7 +243,7 @@ const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * @throws {TypeError}
  */
 function assertGuid(guid) {
-  if (typeof guid !== 'string' || !GUID_PATTERN.test(guid)) {
+  if (typeof guid !== "string" || !GUID_PATTERN.test(guid)) {
     throw new TypeError(`[Audit Lens] Invalid GUID: "${guid}"`);
   }
 }
@@ -242,7 +257,7 @@ function assertGuid(guid) {
  * @throws {TypeError}
  */
 function assertEntitySetName(name) {
-  if (typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(name)) {
+  if (typeof name !== "string" || !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(name)) {
     throw new TypeError(`[Audit Lens] Invalid entity set name: "${name}"`);
   }
 }
@@ -266,19 +281,18 @@ function assertEntitySetName(name) {
  */
 async function runPool(tasks, limit = MAX_CONCURRENT) {
   const results = new Array(tasks.length);
-  let   nextIdx = 0;
+  let nextIdx = 0;
 
   async function worker() {
     while (nextIdx < tasks.length) {
-      const idx  = nextIdx++;          // claim a task slot atomically within the microtask
+      const idx = nextIdx++; // claim a task slot atomically within the microtask
       results[idx] = await tasks[idx](); // may throw; propagated to caller via Promise.all
     }
   }
 
   // Spin up exactly `limit` worker coroutines (or fewer if there aren't enough tasks).
-  const workers = Array.from(
-    { length: Math.min(limit, tasks.length) },
-    () => worker()
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () =>
+    worker(),
   );
 
   await Promise.all(workers);
@@ -319,12 +333,18 @@ async function fetchWithRetry(fetchFn, maxRetries = 3) {
     // Retryable server-side errors
     if (response.status === 429 || response.status === 503) {
       if (attempt === maxRetries) {
-        lastError = new ApiError(response.status, 'Rate-limited or service unavailable', response);
+        lastError = new ApiError(
+          response.status,
+          "Rate-limited or service unavailable",
+          response,
+        );
         break;
       }
-      const retryAfter = Number(response.headers.get('Retry-After') ?? 0);
-      const delay      = retryAfter > 0 ? retryAfter * 1000 : backoffMs(attempt);
-      console.warn(`[Audit Lens] HTTP ${response.status} — retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      const retryAfter = Number(response.headers.get("Retry-After") ?? 0);
+      const delay = retryAfter > 0 ? retryAfter * 1000 : backoffMs(attempt);
+      console.warn(
+        `[Audit Lens] HTTP ${response.status} — retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+      );
       await sleep(delay);
       continue;
     }
@@ -342,7 +362,7 @@ function backoffMs(attempt) {
 }
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ── Custom error type ─────────────────────────────────────────────────────────
@@ -355,8 +375,8 @@ class ApiError extends Error {
    */
   constructor(status, message, response) {
     super(`[Audit Lens] API ${status}: ${message}`);
-    this.name     = 'ApiError';
-    this.status   = status;
+    this.name = "ApiError";
+    this.status = status;
     this.response = response;
   }
 }
@@ -400,9 +420,10 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
   assertEntitySetName(entitySetName);
   assertGuid(guid);
 
-  const baseUrl = `${getOrgUri()}/api/data/v${API_VERSION}`
-               + `/${entitySetName}(${encodeURIComponent(guid)})`
-               + `/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory()`;
+  const baseUrl =
+    `${getOrgUri()}/api/data/v${API_VERSION}` +
+    `/${entitySetName}(${encodeURIComponent(guid)})` +
+    `/Microsoft.Dynamics.CRM.RetrieveRecordChangeHistory()`;
 
   // Follow @odata.nextLink pagination — RetrieveRecordChangeHistory can return
   // paginated results when audit history exceeds the server page size (~5 000).
@@ -413,17 +434,17 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
   for (let page = 0; page < MAX_PAGES; page++) {
     const response = await fetchWithRetry(() =>
       fetch(url, {
-        method:      'GET',
-        credentials: 'include',      // send the MSCRM session cookie
-        headers:     ODATA_HEADERS,
-      })
+        method: "GET",
+        credentials: "include", // send the MSCRM session cookie
+        headers: ODATA_HEADERS,
+      }),
     );
 
     const json = await response.json();
     const details = json?.AuditDetailCollection?.AuditDetails ?? [];
     allDetails = allDetails.concat(details);
 
-    const nextLink = json['@odata.nextLink'];
+    const nextLink = json["@odata.nextLink"];
     if (!nextLink) break;
 
     // Validate nextLink is same-origin to prevent SSRF via tampered response.
@@ -462,7 +483,7 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
   if (!Array.isArray(guids) || guids.length === 0) return [];
 
   // Build one task-factory per GUID.
-  const tasks = guids.map(guid => async () => {
+  const tasks = guids.map((guid) => async () => {
     try {
       return await fetchAuditHistoryForRecord(entitySetName, guid);
     } catch (err) {
@@ -470,14 +491,15 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
       const status = err instanceof ApiError ? err.status : undefined;
       let errorMsg = err.message ?? String(err);
       if (status === 403) {
-        errorMsg = 'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+        errorMsg =
+          'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
       } else if (status === 404) {
-        errorMsg = 'Record not found \u2014 it may have been deleted.';
+        errorMsg = "Record not found \u2014 it may have been deleted.";
       }
       return {
         guid,
         entitySetName,
-        error:  errorMsg,
+        error: errorMsg,
         status,
       };
     }
@@ -543,7 +565,7 @@ const metadataCache = new Map();
  * @throws {TypeError}
  */
 function assertEntityLogicalName(name) {
-  if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,127}$/.test(name)) {
+  if (typeof name !== "string" || !/^[a-z][a-z0-9_]{0,127}$/.test(name)) {
     throw new TypeError(`[Audit Lens] Invalid entity logical name: "${name}"`);
   }
 }
@@ -578,44 +600,50 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   // Nested OData query options inside $expand use semicolons as separators.
   const nestedOpts = [
-    '$select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName',
-    '$expand=OptionSet($select=IsGlobal,Options,TrueOption,FalseOption)',
-  ].join(';');
+    "$select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName",
+    "$expand=OptionSet($select=IsGlobal,Options,TrueOption,FalseOption)",
+  ].join(";");
 
-  const url = `${getOrgUri()}/api/data/v${API_VERSION}`
-            + `/EntityDefinitions(LogicalName='${entityLogicalName}')`
-            + `?$select=LogicalName,PrimaryIdAttribute,EntitySetName`
-            + `&$expand=Attributes(${nestedOpts})`;
+  const url =
+    `${getOrgUri()}/api/data/v${API_VERSION}` +
+    `/EntityDefinitions(LogicalName='${entityLogicalName}')` +
+    `?$select=LogicalName,PrimaryIdAttribute,EntitySetName` +
+    `&$expand=Attributes(${nestedOpts})`;
 
   const response = await fetchWithRetry(() =>
     fetch(url, {
-      method:      'GET',
-      credentials: 'include',
-      headers:     ODATA_HEADERS,
-    })
+      method: "GET",
+      credentials: "include",
+      headers: ODATA_HEADERS,
+    }),
   );
 
   const json = await response.json();
 
   const attributes = new Map(); // logicalName → AttrMeta
-  const byColumn   = new Map(); // ColumnNumber → logicalName
+  const byColumn = new Map(); // ColumnNumber → logicalName
 
-  for (const attr of (json.Attributes ?? [])) {
+  for (const attr of json.Attributes ?? []) {
     const logicalName = attr.LogicalName;
-    if (typeof logicalName !== 'string') continue;
+    if (typeof logicalName !== "string") continue;
 
-    const displayName = attr.DisplayName?.UserLocalizedLabel?.Label ?? logicalName;
-    const type        = String(attr.AttributeType ?? 'Unknown');
+    const displayName =
+      attr.DisplayName?.UserLocalizedLabel?.Label ?? logicalName;
+    const type = String(attr.AttributeType ?? "Unknown");
 
     // ── Build integer → label map for option-set backed types ──────────────
     let options = null;
 
-    if (type === 'Boolean' && attr.OptionSet) {
+    if (type === "Boolean" && attr.OptionSet) {
       // Boolean attributes use TrueOption / FalseOption, not an Options array.
-      const trueLabel  = attr.OptionSet.TrueOption?.Label?.UserLocalizedLabel?.Label  ?? 'Yes';
-      const falseLabel = attr.OptionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? 'No';
-      options = new Map([[1, trueLabel], [0, falseLabel]]);
-
+      const trueLabel =
+        attr.OptionSet.TrueOption?.Label?.UserLocalizedLabel?.Label ?? "Yes";
+      const falseLabel =
+        attr.OptionSet.FalseOption?.Label?.UserLocalizedLabel?.Label ?? "No";
+      options = new Map([
+        [1, trueLabel],
+        [0, falseLabel],
+      ]);
     } else if (Array.isArray(attr.OptionSet?.Options)) {
       // Picklist, State, Status — and GlobalOptionSets resolved inline by server.
       options = new Map();
@@ -631,14 +659,14 @@ async function fetchEntityMetadata(entityLogicalName) {
     const meta = { displayName, type, options };
     attributes.set(logicalName, meta);
 
-    if (typeof attr.ColumnNumber === 'number') {
+    if (typeof attr.ColumnNumber === "number") {
       byColumn.set(attr.ColumnNumber, logicalName);
     }
   }
 
   /** @type {EntityMeta} */
   const entityMeta = {
-    primaryId:     json.PrimaryIdAttribute ?? `${entityLogicalName}id`,
+    primaryId: json.PrimaryIdAttribute ?? `${entityLogicalName}id`,
     entitySetName: json.EntitySetName ?? null,
     attributes,
     byColumn,
@@ -663,7 +691,9 @@ async function resolveEntitySetName(entityLogicalName) {
   if (cached?.entitySetName) return cached.entitySetName;
   const meta = await fetchEntityMetadata(entityLogicalName);
   if (!meta.entitySetName) {
-    throw new Error(`Could not resolve EntitySetName for "${entityLogicalName}". Ensure the entity exists and you have read access.`);
+    throw new Error(
+      `Could not resolve EntitySetName for "${entityLogicalName}". Ensure the entity exists and you have read access.`,
+    );
   }
   return meta.entitySetName;
 }
@@ -693,7 +723,7 @@ function parseAttributeMask(attributemask, byColumn) {
   if (!raw) return [];
 
   const logicalNames = [];
-  for (const part of raw.split(',')) {
+  for (const part of raw.split(",")) {
     const colNum = Number(part.trim());
     if (!Number.isFinite(colNum)) continue;
     const name = byColumn.get(colNum);
@@ -707,7 +737,7 @@ function parseAttributeMask(attributemask, byColumn) {
 // ── Value resolver ────────────────────────────────────────────────────────────
 
 /** OData formatted-value annotation suffix added by Dataverse. */
-const FORMATTED_SUFFIX = '@OData.Community.Display.V1.FormattedValue';
+const FORMATTED_SUFFIX = "@OData.Community.Display.V1.FormattedValue";
 
 /**
  * Resolve a single attribute value to a human-readable string.
@@ -732,31 +762,37 @@ function resolveFieldValue(logicalName, value, container, attrMeta) {
   const annotationKey = `${logicalName}${FORMATTED_SUFFIX}`;
   if (Object.prototype.hasOwnProperty.call(container, annotationKey)) {
     const fv = container[annotationKey];
-    return fv !== null && fv !== undefined ? String(fv) : '(empty)';
+    return fv !== null && fv !== undefined ? String(fv) : "(empty)";
   }
 
   // 2. Null / undefined sentinel.
-  if (value === null || value === undefined) return '(empty)';
+  if (value === null || value === undefined) return "(empty)";
 
   // 3. Enum option resolution (Picklist, State, Status, Boolean).
-  if (attrMeta?.options && typeof value === 'number') {
+  if (attrMeta?.options && typeof value === "number") {
     const label = attrMeta.options.get(value);
     if (label !== undefined) return label;
   }
 
   // 4. Raw boolean with no options map.
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     if (attrMeta?.options) {
-      return attrMeta.options.get(value ? 1 : 0) ?? (value ? 'Yes' : 'No');
+      return attrMeta.options.get(value ? 1 : 0) ?? (value ? "Yes" : "No");
     }
-    return value ? 'Yes' : 'No';
+    return value ? "Yes" : "No";
   }
 
   // 5. ISO-8601 datetime string.
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)) {
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)
+  ) {
     const d = new Date(value);
     if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+      return d.toLocaleString(undefined, {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
     }
   }
 
@@ -796,8 +832,10 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
     entityMeta = await fetchEntityMetadata(entityLogicalName);
   } catch {
     entityMeta = {
-      primaryId: `${entityLogicalName}id`, entitySetName: null,
-      attributes: new Map(), byColumn: new Map(),
+      primaryId: `${entityLogicalName}id`,
+      entitySetName: null,
+      attributes: new Map(),
+      byColumn: new Map(),
     };
   }
   const auditDetails = rawAuditData?.AuditDetailCollection?.AuditDetails ?? [];
@@ -807,64 +845,87 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
 
   for (const detail of auditDetails) {
     const auditRecord = detail.AuditRecord ?? {};
-    const oldValue    = detail.OldValue    ?? {};
-    const newValue    = detail.NewValue    ?? {};
+    const oldValue = detail.OldValue ?? {};
+    const newValue = detail.NewValue ?? {};
 
     // ── Provenance ──────────────────────────────────────────────────────────
     const changedBy = String(
-      auditRecord[`_userid_value${FORMATTED_SUFFIX}`]
-      ?? auditRecord['_userid_value']
-      ?? '(unknown user)'
+      auditRecord[`_userid_value${FORMATTED_SUFFIX}`] ??
+        auditRecord["_userid_value"] ??
+        "(unknown user)",
     );
 
-    const rawDate    = auditRecord.createdon ?? '';
+    const rawDate = auditRecord.createdon ?? "";
     const changedDate = rawDate
-      ? new Date(rawDate).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-      : '(unknown date)';
+      ? new Date(rawDate).toLocaleString(undefined, {
+          dateStyle: "short",
+          timeStyle: "short",
+        })
+      : "(unknown date)";
 
     const operation = String(
-      auditRecord[`operation${FORMATTED_SUFFIX}`]
-      ?? auditRecord.operation
-      ?? ''
+      auditRecord[`operation${FORMATTED_SUFFIX}`] ??
+        auditRecord.operation ??
+        "",
     );
 
     // ── Determine changed fields ────────────────────────────────────────────
     // Primary: decode attributemask (ColumnNumber-based, most authoritative).
-    const maskNames = parseAttributeMask(auditRecord.attributemask, entityMeta.byColumn);
+    const maskNames = parseAttributeMask(
+      auditRecord.attributemask,
+      entityMeta.byColumn,
+    );
 
     // Fallback / supplement: diff the object keys (excludes '@'-annotated keys).
     const diffKeys = new Set([
-      ...Object.keys(oldValue).filter(k => !k.includes('@')),
-      ...Object.keys(newValue).filter(k => !k.includes('@')),
+      ...Object.keys(oldValue).filter((k) => !k.includes("@")),
+      ...Object.keys(newValue).filter((k) => !k.includes("@")),
     ]);
 
     // Use mask-decoded names if available; otherwise fall back to key diffing.
     // Either way, also include diffKeys so we never miss fields.
-    const changedFields = maskNames.length > 0
-      ? [...new Set([...maskNames, ...diffKeys])]
-      : [...diffKeys];
+    const changedFields =
+      maskNames.length > 0
+        ? [...new Set([...maskNames, ...diffKeys])]
+        : [...diffKeys];
 
     // ── One row per changed field ───────────────────────────────────────────
     for (const logicalName of changedFields) {
-      const attrMeta    = entityMeta.attributes.get(logicalName) ?? null;
+      const attrMeta = entityMeta.attributes.get(logicalName) ?? null;
       // When metadata is unavailable (deleted field or inaccessible schema),
       // tag the name so users understand why the display name is raw.
       const displayName = attrMeta?.displayName ?? `${logicalName} (deleted)`;
 
-      const hasOld = Object.prototype.hasOwnProperty.call(oldValue, logicalName);
-      const hasNew = Object.prototype.hasOwnProperty.call(newValue, logicalName);
+      const hasOld = Object.prototype.hasOwnProperty.call(
+        oldValue,
+        logicalName,
+      );
+      const hasNew = Object.prototype.hasOwnProperty.call(
+        newValue,
+        logicalName,
+      );
 
       // Skip entries where neither side carries a value for this field.
       if (!hasOld && !hasNew) continue;
 
       rows.push({
-        RecordID:    guid,
-        ChangedBy:   changedBy,
+        RecordID: guid,
+        ChangedBy: changedBy,
         ChangedDate: changedDate,
-        Operation:   operation,
-        FieldName:   displayName,
-        OldValue:    resolveFieldValue(logicalName, hasOld ? oldValue[logicalName] : undefined, oldValue, attrMeta),
-        NewValue:    resolveFieldValue(logicalName, hasNew ? newValue[logicalName] : undefined, newValue, attrMeta),
+        Operation: operation,
+        FieldName: displayName,
+        OldValue: resolveFieldValue(
+          logicalName,
+          hasOld ? oldValue[logicalName] : undefined,
+          oldValue,
+          attrMeta,
+        ),
+        NewValue: resolveFieldValue(
+          logicalName,
+          hasNew ? newValue[logicalName] : undefined,
+          newValue,
+          attrMeta,
+        ),
       });
     }
   }
@@ -893,73 +954,98 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData) {
  *   PING — Liveness check.
  *     Response: { ok: true, alive: true }
  */
-chrome.runtime.onMessage.addListener(function onExtensionMessage(message, _sender, sendResponse) {
-  if (message.type === 'GET_CONTEXT') {
-    requestFreshContext()
-      .then(context => sendResponse({ ok: true, context }))
-      .catch(()      => sendResponse({ ok: false, context: cachedContext, error: 'timeout' }));
-    return true;
-  }
-
-  if (message.type === 'FETCH_AUDIT_HISTORY') {
-    const { entitySetName, guids } = message.payload ?? {};
-    if (typeof entitySetName !== 'string' || !Array.isArray(guids) || guids.length === 0) {
-      sendResponse({ ok: false, error: 'Invalid payload: entitySetName (string) and guids (array) are required.' });
-      return false;
-    }
-    fetchAuditHistoryBatch(entitySetName, guids)
-      .then(results => sendResponse({ ok: true, results }))
-      .catch(err    => sendResponse({ ok: false, error: err.message ?? String(err) }));
-    return true;
-  }
-
-  if (message.type === 'FETCH_AND_FORMAT_AUDIT') {
-    let { entityLogicalName, entitySetName, guids } = message.payload ?? {};
-    if (
-      typeof entityLogicalName !== 'string' ||
-      !Array.isArray(guids) || guids.length === 0
-    ) {
-      sendResponse({ ok: false, error: 'Invalid payload: entityLogicalName (string) and guids (array) are required.' });
-      return false;
+chrome.runtime.onMessage.addListener(
+  function onExtensionMessage(message, _sender, sendResponse) {
+    if (message.type === "GET_CONTEXT") {
+      requestFreshContext()
+        .then((context) => sendResponse({ ok: true, context }))
+        .catch(() =>
+          sendResponse({ ok: false, context: cachedContext, error: "timeout" }),
+        );
+      return true;
     }
 
-    (async () => {
-      // Auto-resolve entitySetName from metadata if the caller didn't provide it.
-      if (typeof entitySetName !== 'string') {
-        entitySetName = await resolveEntitySetName(entityLogicalName);
+    if (message.type === "FETCH_AUDIT_HISTORY") {
+      const { entitySetName, guids } = message.payload ?? {};
+      if (
+        typeof entitySetName !== "string" ||
+        !Array.isArray(guids) ||
+        guids.length === 0
+      ) {
+        sendResponse({
+          ok: false,
+          error:
+            "Invalid payload: entitySetName (string) and guids (array) are required.",
+        });
+        return false;
       }
-      const rawResults = await fetchAuditHistoryBatch(entitySetName, guids);
-      const allRows    = [];
+      fetchAuditHistoryBatch(entitySetName, guids)
+        .then((results) => sendResponse({ ok: true, results }))
+        .catch((err) =>
+          sendResponse({ ok: false, error: err.message ?? String(err) }),
+        );
+      return true;
+    }
 
-      for (const result of rawResults) {
-        if (result.error) {
-          // Surface per-record fetch failures as sentinel rows.
-          allRows.push({
-            RecordID:    result.guid,
-            ChangedBy:   '',
-            ChangedDate: '',
-            Operation:   'FETCH_ERROR',
-            FieldName:   '',
-            OldValue:    '',
-            NewValue:    result.error,
-          });
-          continue;
+    if (message.type === "FETCH_AND_FORMAT_AUDIT") {
+      let { entityLogicalName, entitySetName, guids } = message.payload ?? {};
+      if (
+        typeof entityLogicalName !== "string" ||
+        !Array.isArray(guids) ||
+        guids.length === 0
+      ) {
+        sendResponse({
+          ok: false,
+          error:
+            "Invalid payload: entityLogicalName (string) and guids (array) are required.",
+        });
+        return false;
+      }
+
+      (async () => {
+        // Auto-resolve entitySetName from metadata if the caller didn't provide it.
+        if (typeof entitySetName !== "string") {
+          entitySetName = await resolveEntitySetName(entityLogicalName);
         }
-        const rows = await formatAuditResults(result.guid, entityLogicalName, result.data);
-        allRows.push(...rows);
-      }
-      return allRows;
-    })()
-      .then(rows => sendResponse({ ok: true,  rows }))
-      .catch(err => sendResponse({ ok: false, error: err.message ?? String(err) }));
-    return true;
-  }
+        const rawResults = await fetchAuditHistoryBatch(entitySetName, guids);
+        const allRows = [];
 
-  if (message.type === 'PING') {
-    sendResponse({ ok: true, alive: true });
-    return false;
-  }
-});
+        for (const result of rawResults) {
+          if (result.error) {
+            // Surface per-record fetch failures as sentinel rows.
+            allRows.push({
+              RecordID: result.guid,
+              ChangedBy: "",
+              ChangedDate: "",
+              Operation: "FETCH_ERROR",
+              FieldName: "",
+              OldValue: "",
+              NewValue: result.error,
+            });
+            continue;
+          }
+          const rows = await formatAuditResults(
+            result.guid,
+            entityLogicalName,
+            result.data,
+          );
+          allRows.push(...rows);
+        }
+        return allRows;
+      })()
+        .then((rows) => sendResponse({ ok: true, rows }))
+        .catch((err) =>
+          sendResponse({ ok: false, error: err.message ?? String(err) }),
+        );
+      return true;
+    }
+
+    if (message.type === "PING") {
+      sendResponse({ ok: true, alive: true });
+      return false;
+    }
+  },
+);
 
 // ── Port-based audit export with streaming progress ───────────────────────────
 //
@@ -968,16 +1054,22 @@ chrome.runtime.onMessage.addListener(function onExtensionMessage(message, _sende
 // progress messages back through the port so the popup can update a progress bar.
 
 chrome.runtime.onConnect.addListener(function onPortConnect(port) {
-  if (port.name !== 'audit-export') return;
+  if (port.name !== "audit-export") return;
 
   // C1 fix: track connection state so workers abort when the popup closes.
   let portAlive = true;
-  port.onDisconnect.addListener(() => { portAlive = false; });
+  port.onDisconnect.addListener(() => {
+    portAlive = false;
+  });
 
   port.onMessage.addListener(async function onPortMessage(msg) {
     const { entityLogicalName, guids } = msg ?? {};
-    if (typeof entityLogicalName !== 'string' || !Array.isArray(guids) || guids.length === 0) {
-      port.postMessage({ type: 'error', error: 'Invalid payload.' });
+    if (
+      typeof entityLogicalName !== "string" ||
+      !Array.isArray(guids) ||
+      guids.length === 0
+    ) {
+      port.postMessage({ type: "error", error: "Invalid payload." });
       return;
     }
 
@@ -987,19 +1079,19 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
       try {
         entitySetName = await resolveEntitySetName(entityLogicalName);
       } catch (err) {
-        if (portAlive) port.postMessage({ type: 'error', error: err.message });
+        if (portAlive) port.postMessage({ type: "error", error: err.message });
         return;
       }
 
-      const total  = guids.length;
-      let   done   = 0;
+      const total = guids.length;
+      let done = 0;
       const allRows = [];
-      let   rowCapHit = false;
+      let rowCapHit = false;
 
       // Build task factories for the pool — each task posts progress on completion.
-      const tasks = guids.map(guid => async () => {
+      const tasks = guids.map((guid) => async () => {
         // C1: abort early if the popup has disconnected.
-        if (!portAlive) return { guid, entitySetName, error: 'cancelled' };
+        if (!portAlive) return { guid, entitySetName, error: "cancelled" };
 
         let result;
         try {
@@ -1008,9 +1100,10 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
           const status = err instanceof ApiError ? err.status : undefined;
           let errorMsg = err.message ?? String(err);
           if (status === 403) {
-            errorMsg = 'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+            errorMsg =
+              'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
           } else if (status === 404) {
-            errorMsg = 'Record not found \u2014 it may have been deleted.';
+            errorMsg = "Record not found \u2014 it may have been deleted.";
           }
           result = { guid, entitySetName, error: errorMsg, status };
         }
@@ -1018,13 +1111,21 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
         // C2 fix: wrap formatting in try/catch so one bad record doesn't kill the batch.
         if (result.error) {
           allRows.push({
-            RecordID: result.guid, ChangedBy: '', ChangedDate: '',
-            Operation: 'FETCH_ERROR', FieldName: '', OldValue: '',
+            RecordID: result.guid,
+            ChangedBy: "",
+            ChangedDate: "",
+            Operation: "FETCH_ERROR",
+            FieldName: "",
+            OldValue: "",
             NewValue: result.error,
           });
         } else {
           try {
-            const rows = await formatAuditResults(result.guid, entityLogicalName, result.data);
+            const rows = await formatAuditResults(
+              result.guid,
+              entityLogicalName,
+              result.data,
+            );
             // C3 fix: enforce row cap at the source to prevent tab OOM.
             if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
               allRows.push(...rows);
@@ -1035,8 +1136,12 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
             }
           } catch (fmtErr) {
             allRows.push({
-              RecordID: result.guid, ChangedBy: '', ChangedDate: '',
-              Operation: 'FORMAT_ERROR', FieldName: '', OldValue: '',
+              RecordID: result.guid,
+              ChangedBy: "",
+              ChangedDate: "",
+              Operation: "FORMAT_ERROR",
+              FieldName: "",
+              OldValue: "",
               NewValue: fmtErr.message ?? String(fmtErr),
             });
           }
@@ -1044,16 +1149,28 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
 
         done++;
         if (portAlive) {
-          try { port.postMessage({ type: 'progress', done, total }); } catch { /* port closed */ }
+          try {
+            port.postMessage({ type: "progress", done, total });
+          } catch {
+            /* port closed */
+          }
         }
         return result;
       });
 
       await runPool(tasks, MAX_CONCURRENT);
-      if (portAlive) port.postMessage({ type: 'done', rows: allRows, capped: rowCapHit });
+      if (portAlive)
+        port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
     } catch (err) {
       if (portAlive) {
-        try { port.postMessage({ type: 'error', error: err.message ?? String(err) }); } catch { /* port closed */ }
+        try {
+          port.postMessage({
+            type: "error",
+            error: err.message ?? String(err),
+          });
+        } catch {
+          /* port closed */
+        }
       }
     }
   });
@@ -1066,19 +1183,20 @@ function init() {
 
   // Send basic page metadata to the service worker immediately (before the
   // bridge has read Xrm); the richer DYNAMICS_CONTEXT_UPDATE follows shortly.
-  chrome.runtime.sendMessage({
-    type: 'DYNAMICS_PAGE_ACTIVE',
-    payload: {
-      hostname: window.location.hostname,
-      pathname: window.location.pathname,
-      title:    document.title.slice(0, 200),
-    },
-  }).catch(() => {});
+  chrome.runtime
+    .sendMessage({
+      type: "DYNAMICS_PAGE_ACTIVE",
+      payload: {
+        hostname: window.location.hostname,
+        pathname: window.location.pathname,
+        title: document.title.slice(0, 200),
+      },
+    })
+    .catch(() => {});
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init, { once: true });
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init, { once: true });
 } else {
   init();
 }
-

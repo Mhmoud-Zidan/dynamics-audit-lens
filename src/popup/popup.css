@@ -4,21 +4,23 @@
    ========================================================= */
 
 :root {
-  --color-bg:        #1e1e2e;
-  --color-surface:   #2a2a3c;
-  --color-border:    #3a3a50;
-  --color-accent:    #0078d4; /* Microsoft blue */
-  --color-text:      #e2e2f0;
-  --color-muted:     #8888aa;
-  --color-success:   #4caf7d;
-  --color-error:     #f44747;
+  --color-bg: #1e1e2e;
+  --color-surface: #2a2a3c;
+  --color-border: #3a3a50;
+  --color-accent: #0078d4; /* Microsoft blue */
+  --color-text: #e2e2f0;
+  --color-muted: #8888aa;
+  --color-success: #4caf7d;
+  --color-error: #f44747;
 
-  --radius:   6px;
-  --gap:      12px;
-  --font:     "Segoe UI", system-ui, sans-serif;
+  --radius: 6px;
+  --gap: 12px;
+  --font: "Segoe UI", system-ui, sans-serif;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -77,9 +79,17 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
 }
-.status--idle   { color: var(--color-muted); }
-.status--active { color: var(--color-success); border-color: var(--color-success); }
-.status--error  { color: var(--color-error);   border-color: var(--color-error);   }
+.status--idle {
+  color: var(--color-muted);
+}
+.status--active {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+.status--error {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
 
 /* ── Footer ──────────────────────────────────────── */
 .footer {
@@ -126,7 +136,9 @@ body {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 
 .btn:disabled {
