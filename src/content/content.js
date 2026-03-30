@@ -579,7 +579,7 @@ function assertEntityLogicalName(name) {
  *   GET [orgUri]/api/data/v9.2/EntityDefinitions(LogicalName='<entity>')
  *     ?$select=LogicalName,PrimaryIdAttribute,EntitySetName
  *     &$expand=Attributes(
- *         $select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName;
+ *         $select=LogicalName,DisplayName,AttributeType,ColumnNumber;
  *         $expand=
  *           Microsoft.Dynamics.CRM.PicklistAttributeMetadata/OptionSet($select=Options),
  *           Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata/OptionSet($select=Options),
@@ -617,7 +617,7 @@ async function fetchEntityMetadata(entityLogicalName) {
     "Microsoft.Dynamics.CRM.BooleanAttributeMetadata/OptionSet($select=TrueOption,FalseOption)",
   ].join(",");
   const nestedOpts = [
-    "$select=LogicalName,DisplayName,AttributeType,ColumnNumber,GlobalOptionSetName",
+    "$select=LogicalName,DisplayName,AttributeType,ColumnNumber",
     `$expand=${optionSetExpands}`,
   ].join(";");
 
