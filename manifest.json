@@ -55,7 +55,7 @@
     }
   ],
 
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab"],
 
   "host_permissions": [
     "*://*.crm.dynamics.com/*",
