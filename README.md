@@ -1,4 +1,4 @@
-# Dynamics Audit Lens
+# Dynamics Audit Lens 🔍🚀
 
 A **strictly local**, Manifest V3 Chrome Extension for auditing and inspecting Microsoft Dynamics 365 / Dataverse pages.  
 Built with **Vite 4 + @crxjs/vite-plugin + Vanilla ES6**.
