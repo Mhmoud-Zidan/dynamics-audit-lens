@@ -47,6 +47,7 @@ function updateProgress(processed, total) {
   const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
   progressFill.style.width = `${pct}%`;
   progressText.textContent = `Processed ${processed} of ${total} records\u2026`;
+  progressText.className = "progress-text";
 }
 
 /** Return a YYYYMMDD date stamp for filenames. */
@@ -214,12 +215,14 @@ async function startExport() {
 
       if (rows.length === 0) {
         progressText.textContent = "No audit records found.";
+        progressText.className = "progress-text progress-text--empty";
       } else {
         if (msg.rows.length > MAX_EXPORT_ROWS) {
           progressText.textContent = `Capped at ${MAX_EXPORT_ROWS.toLocaleString()} rows. Generating file\u2026`;
         }
         generateExcel(rows, entityName);
         progressText.textContent = `Export complete \u2014 ${rows.length} row${rows.length !== 1 ? "s" : ""}.`;
+        progressText.className = "progress-text progress-text--success";
       }
 
       exporting = false;
@@ -228,6 +231,7 @@ async function startExport() {
 
     if (msg.type === "error") {
       progressText.textContent = `Error: ${msg.error}`;
+      progressText.className = "progress-text progress-text--error";
       setStatus("Export failed.", "error");
       exporting = false;
       exportBtn.disabled = false;
@@ -237,6 +241,7 @@ async function startExport() {
   port.onDisconnect.addListener(() => {
     if (exporting) {
       progressText.textContent = "Connection lost. Reload the page and retry.";
+      progressText.className = "progress-text progress-text--error";
       setStatus("Export failed.", "error");
       exporting = false;
       exportBtn.disabled = false;

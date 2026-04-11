@@ -283,6 +283,29 @@ body {
   font-size: 11px;
   color: var(--color-text-2);
   text-align: center;
+  transition: color 0.2s var(--ease);
+}
+
+.progress-text--empty {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f5a623;
+  background: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(245, 166, 35, 0.22);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+}
+
+.progress-text--success {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.progress-text--error {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-error);
 }
 
 /* ── Footer ──────────────────────────────────────── */
