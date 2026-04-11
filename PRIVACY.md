@@ -17,4 +17,4 @@ Dynamics Audit Lens ("the Extension") is a productivity tool for Microsoft Dynam
 The Extension does not use any third-party analytics, tracking scripts, or remote code. All libraries (e.g., ExcelJS) are bundled locally within the extension package.
 
 ## 5. Contact
-For questions regarding this policy, please open an issue on our GitHub repository: [INSERT_YOUR_REPO_URL_HERE]
+For questions regarding this policy, please open an issue on our GitHub repository: https://github.com/Mhmoud-Zidan/dynamics-audit-lens/issues
