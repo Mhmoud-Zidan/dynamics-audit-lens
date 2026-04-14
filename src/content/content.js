@@ -551,7 +551,7 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
  * @property {string} RecordID    GUID of the audited record.
  * @property {string} RecordName  Primary name of the audited record.
  * @property {string} ChangedBy   Display name of the user who made the change.
- * @property {string} ChangedDate Localised date/time string.
+ * @property {Date}   ChangedDate Date of the change.
  * @property {string} Operation   Human-readable operation (e.g. "Update").
  * @property {string} FieldName   Display name of the changed attribute.
  * @property {string} OldValue    Resolved human-readable old value.
@@ -1014,12 +1014,11 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordN
     );
 
     const rawDate = auditRecord.createdon ?? "";
-    const changedDate = rawDate
-      ? new Date(rawDate).toLocaleString(undefined, {
-          dateStyle: "short",
-          timeStyle: "short",
-        })
-      : "(unknown date)";
+    let changedDate = "";
+    if (rawDate && rawDate.trim()) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) changedDate = d;
+    }
 
     const rawOp =
       auditRecord[`operation${FORMATTED_SUFFIX}`] ??

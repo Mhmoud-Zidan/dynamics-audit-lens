@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Dynamics Audit Lens",
   "short_name": "Audit Lens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-only audit and inspection tool for Microsoft Dynamics 365 / Dataverse. No data leaves your browser.",
 
   "icons": {

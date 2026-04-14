@@ -66,6 +66,33 @@ function formatDateStamp() {
  */
 function generateExcel(rows, entityName) {
   let ws = XLSX.utils.json_to_sheet(rows);
+
+  // Set ChangedDate column to Excel date type for native sorting/filtering
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  let dateCol = -1;
+  // Find ChangedDate column header in row 0
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const cellAddress = XLSX.utils.encode_cell({r: range.s.r, c: C});
+    const cell = ws[cellAddress];
+    if (cell && cell.v === 'ChangedDate') {
+      dateCol = C;
+      break;
+    }
+  }
+  if (dateCol >= 0) {
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+      const cellAddress = XLSX.utils.encode_cell({r: R, c: dateCol});
+      const cell = ws[cellAddress];
+      if (cell && cell.v != null && cell.v !== '') {
+        // Convert to Excel date type if value is a Date object or number
+        if (cell.v instanceof Date || typeof cell.v === 'number') {
+          cell.t = 'd';
+          cell.z = 'yyyy-mm-dd hh:mm:ss';
+        }
+      }
+    }
+  }
+
   let wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Audit History");
 
