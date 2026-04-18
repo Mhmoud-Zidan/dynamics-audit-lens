@@ -61,6 +61,13 @@ let selectedUser = null;
 let searchTimeout = null;
 let entitySearchTimeout = null;
 
+// ── Version badge ────────────────────────────────────────────────────────────
+
+(function setVersionBadge() {
+  const el = document.getElementById("app-version");
+  if (el) el.textContent = `v${chrome.runtime.getManifest().version}`;
+})();
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 const tabBtns = document.querySelectorAll(".tab");
@@ -273,10 +280,7 @@ async function fetchContext() {
     recordInfoEl.hidden = false;
 
     if (currentContext.selectionUnavailable) {
-      setStatus(
-        "Grid selection could not be read. Try selecting records and re-opening.",
-        "error",
-      );
+      recordCountEl.textContent = "0 records selected";
     }
 
     if (count > MAX_EXPORT_RECORDS) {
@@ -634,7 +638,7 @@ async function startUserExport() {
       }
 
       userExporting = false;
-      userExportBtn.disabled = false;
+      updateUserExportBtnState();
     }
 
     if (msg.type === "error") {
@@ -642,7 +646,7 @@ async function startUserExport() {
       userProgressText.className = "progress-text progress-text--error";
       setUserStatus("Export failed.", "error");
       userExporting = false;
-      userExportBtn.disabled = false;
+      updateUserExportBtnState();
     }
   });
 
@@ -652,7 +656,7 @@ async function startUserExport() {
       userProgressText.className = "progress-text progress-text--error";
       setUserStatus("Export failed.", "error");
       userExporting = false;
-      userExportBtn.disabled = false;
+      updateUserExportBtnState();
     }
   });
 

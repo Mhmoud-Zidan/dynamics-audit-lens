@@ -498,7 +498,9 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
       // Capture per-record failures; don't let one record block others.
       const status = err instanceof ApiError ? err.status : undefined;
       let errorMsg = err.message ?? String(err);
-      if (status === 403) {
+      if (status === 401) {
+        errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
+      } else if (status === 403) {
         errorMsg =
           'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
       } else if (status === 404) {
@@ -932,6 +934,67 @@ function resolveFieldValue(logicalName, value, container, attrMeta) {
   return String(value);
 }
 
+// ── User name resolution helpers ──────────────────────────────────────────────
+
+/**
+ * Collect unique user GUIDs from an array of AuditDetail objects.
+ *
+ * @param {object[]} auditDetails  Array of AuditDetail objects.
+ * @returns {Set<string>}  Set of lowercase user GUIDs.
+ */
+function collectUserGuids(auditDetails) {
+  const guids = new Set();
+  for (const detail of auditDetails) {
+    const uid = detail.AuditRecord?.["_userid_value"];
+    if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
+      guids.add(uid.toLowerCase());
+    }
+  }
+  return guids;
+}
+
+/**
+ * Batch-fetch user display names for a set of user GUIDs.
+ * Merges results into `targetMap` (existing entries are not overwritten).
+ *
+ * @param {Set<string>|string[]} userGuids  User GUIDs to resolve.
+ * @param {Map<string,string>}   [targetMap]  Map to merge results into.
+ * @returns {Promise<Map<string,string>>}  guid → fullname map.
+ */
+async function fetchUserDisplayNames(userGuids, targetMap) {
+  const map = targetMap ?? new Map();
+  const toFetch = [...userGuids].filter((uid) => !map.has(uid));
+  if (toFetch.length === 0) return map;
+
+  const tasks = toFetch.map((uid) => async () => {
+    try {
+      const url =
+        `${getOrgUri()}/api/data/v${API_VERSION}` +
+        `/systemusers(${uid})?$select=fullname`;
+      const resp = await fetchWithRetry(() =>
+        fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+      );
+      const json = await resp.json();
+      if (json.fullname) map.set(uid, json.fullname);
+    } catch { /* best-effort */ }
+  });
+  await runPool(tasks, MAX_CONCURRENT);
+  return map;
+}
+
+/**
+ * Fetch user display names from AuditDetail entries (per-record fallback).
+ * Used when no shared map is provided to formatAuditResults.
+ *
+ * @param {object[]} auditDetails
+ * @returns {Promise<Map<string,string>>}
+ */
+async function fetchUserNames(auditDetails) {
+  const guids = collectUserGuids(auditDetails);
+  if (guids.size === 0) return new Map();
+  return fetchUserDisplayNames(guids);
+}
+
 // ── Audit result formatter ────────────────────────────────────────────────────
 
 /**
@@ -953,9 +1016,12 @@ function resolveFieldValue(logicalName, value, container, attrMeta) {
  * @param {string} entityLogicalName  Entity logical name, e.g. "account".
  * @param {object} rawAuditData       Parsed JSON body from the API response.
  * @param {string} recordName         Display name of the record.
+ * @param {Map<string,string>} [sharedUserNameMap]  Pre-fetched user name map
+ *   (shared across records to avoid redundant API calls). If omitted, user
+ *   names are fetched per-record (backwards-compatible fallback).
  * @returns {Promise<FormattedAuditRow[]>}
  */
-async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordName) {
+async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordName, sharedUserNameMap) {
   assertGuid(guid);
   assertEntityLogicalName(entityLogicalName);
 
@@ -974,34 +1040,9 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordN
   }
   const auditDetails = rawAuditData?.AuditDetailCollection?.AuditDetails ?? [];
 
-  // ── Resolve user display names ──────────────────────────────────────────
-  // Collect unique user GUIDs from all audit records so we can batch-fetch
-  // their display names from systemusers (in case formatted annotations
-  // are not returned by RetrieveRecordChangeHistory).
-  const userGuidSet = new Set();
-  for (const detail of auditDetails) {
-    const uid = detail.AuditRecord?.["_userid_value"];
-    if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
-      userGuidSet.add(uid.toLowerCase());
-    }
-  }
-  /** @type {Map<string,string>} */
-  const userNameMap = new Map();
-  if (userGuidSet.size > 0) {
-    const userTasks = [...userGuidSet].map((uid) => async () => {
-      try {
-        const url =
-          `${getOrgUri()}/api/data/v${API_VERSION}` +
-          `/systemusers(${uid})?$select=fullname`;
-        const resp = await fetchWithRetry(() =>
-          fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
-        );
-        const json = await resp.json();
-        if (json.fullname) userNameMap.set(uid, json.fullname);
-      } catch { /* best-effort */ }
-    });
-    await runPool(userTasks, MAX_CONCURRENT);
-  }
+  // Use the shared map if provided (pre-fetched at the batch level to avoid
+  // O(records × users) API calls). Otherwise fall back to per-record fetching.
+  const userNameMap = sharedUserNameMap ?? await fetchUserNames(auditDetails);
 
   /** @type {FormattedAuditRow[]} */
   const rows = [];
@@ -1104,9 +1145,11 @@ async function searchUsers(query) {
   if (typeof query !== "string" || query.trim().length < 2) return [];
 
   const sanitized = query.trim().replace(/'/g, "''");
+  const filterStr =
+    `(contains(fullname,'${sanitized}') or contains(internalemailaddress,'${sanitized}')) and isdisabled eq false`;
   const url =
     `${getOrgUri()}/api/data/v${API_VERSION}/systemusers` +
-    `?$filter=contains(fullname,'${sanitized}') or contains(internalemailaddress,'${sanitized}')` +
+    `?$filter=${encodeURIComponent(filterStr)}` +
     `&$select=systemuserid,fullname,internalemailaddress&$top=15`;
 
   try {
@@ -1128,6 +1171,8 @@ async function searchUsers(query) {
 
 /** Full entity list cached after first fetch. */
 let entityListCache = null;
+/** Origin at the time entityListCache was populated. */
+let entityListCacheOrigin = null;
 
 /**
  * Search entities by display name OR logical name.
@@ -1138,6 +1183,13 @@ let entityListCache = null;
  */
 async function searchEntities(query) {
   if (typeof query !== "string" || query.trim().length < 2) return [];
+
+  // Invalidate cache if the org origin has changed (e.g. user navigated to a different org).
+  const currentOrigin = getOrgUri();
+  if (entityListCache && entityListCacheOrigin !== currentOrigin) {
+    entityListCache = null;
+    entityListCacheOrigin = null;
+  }
 
   // Fetch and cache the full entity list on first call.
   if (!entityListCache) {
@@ -1155,6 +1207,7 @@ async function searchEntities(query) {
           e.DisplayName?.UserLocalizedLabel?.Label ?? e.LogicalName ?? "",
         entitySetName: e.EntitySetName ?? null,
       }));
+      entityListCacheOrigin = currentOrigin;
     } catch {
       return [];
     }
@@ -1188,14 +1241,21 @@ async function searchEntities(query) {
 // ── User audit record discovery ───────────────────────────────────────────────
 
 /**
- * Query the Dataverse audit entityset to discover which record GUIDs a user
- * has touched for a given entity, optionally within a date range.
+ * Discover which record GUIDs a user has touched for a given entity, within an
+ * optional date range. Uses two complementary data sources:
  *
- * Strategy:
- *   1. Query /audit?$filter=_userid_value eq {userGuid} and
- *      objecttypecode eq '{entityLogicalName}' [and date filters]
- *   2. Paginate through results, collecting unique _objectid_value GUIDs.
- *   3. Cap at MAX_USER_AUDIT_RECORDS unique records.
+ * Source 1 — Entity table query (always reliable):
+ *   GET /{entitySetName}?$filter=_modifiedby_value eq {userGuid} [and modifiedon ...]
+ *   Works for any user with entity-read permission — does NOT require direct
+ *   audit-entity access. Finds records where the user was the last modifier.
+ *
+ * Source 2 — Audit entity direct query (supplementary):
+ *   GET /audits?$filter=_userid_value eq {userGuid} and objecttypecode eq '...'
+ *   Catches records where the user made intermediate changes (not the last editor).
+ *   Requires System Admin / direct audit-entity read access. Silently skipped
+ *   when the user lacks the required privilege (403 or empty result).
+ *
+ * Results from both sources are merged and de-duplicated.
  *
  * @param {string}      entityLogicalName  e.g. "account"
  * @param {string}      userGuid           Bare GUID of the target user.
@@ -1207,53 +1267,108 @@ async function fetchUserAuditRecordGuids(entityLogicalName, userGuid, dateFrom, 
   assertEntityLogicalName(entityLogicalName);
   assertGuid(userGuid);
 
-  // objecttypecode is Edm.String in the Dataverse audit entity — it stores the
-  // entity logical name (e.g. "account"), not the integer ObjectTypeCode.
-  let filter = `_userid_value eq ${userGuid} and objecttypecode eq '${entityLogicalName}'`;
-
-  // Convert local calendar dates to UTC for OData comparison.
-  // HTML <input type="date"> gives local dates — we must not treat them as UTC.
-  if (dateFrom) {
-    const utcFrom = new Date(`${dateFrom}T00:00:00`).toISOString();
-    filter += ` and createdon ge ${utcFrom}`;
-  }
-  if (dateTo) {
-    const utcTo = new Date(`${dateTo}T23:59:59.999`).toISOString();
-    filter += ` and createdon le ${utcTo}`;
-  }
-
-  const baseUrl =
-    `${getOrgUri()}/api/data/v${API_VERSION}/audits` +
-    `?$filter=${filter}` +
-    `&$select=_objectid_value`;
-
   const recordGuids = new Set();
-  let nextUrl = baseUrl;
 
-  for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
-    const response = await fetchWithRetry(() =>
-      fetch(nextUrl, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
-    );
-    const json = await response.json();
+  // ── Source 1: Entity table query ─────────────────────────────────────────────
+  // Find records where _modifiedby_value matches the user, filtered by modifiedon.
+  // This is the primary discovery path and works with standard entity-read access.
+  try {
+    const entitySetName = await resolveEntitySetName(entityLogicalName);
+    const meta = await fetchEntityMetadata(entityLogicalName);
 
-    for (const record of json.value ?? []) {
-      const objId = record._objectid_value;
-      if (typeof objId === "string" && GUID_PATTERN.test(objId)) {
-        recordGuids.add(objId.toLowerCase());
+    let entityFilter = `_modifiedby_value eq ${userGuid}`;
+    if (dateFrom) {
+      entityFilter += ` and modifiedon ge ${new Date(`${dateFrom}T00:00:00`).toISOString()}`;
+    }
+    if (dateTo) {
+      entityFilter += ` and modifiedon le ${new Date(`${dateTo}T23:59:59.999`).toISOString()}`;
+    }
+
+    let nextUrl =
+      `${getOrgUri()}/api/data/v${API_VERSION}/${entitySetName}` +
+      `?$filter=${entityFilter}&$select=${meta.primaryId}`;
+
+    for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
+      const resp = await fetchWithRetry(() =>
+        fetch(nextUrl, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+      );
+      const json = await resp.json();
+      for (const record of json.value ?? []) {
+        const id = record[meta.primaryId];
+        if (typeof id === "string" && GUID_PATTERN.test(id)) {
+          recordGuids.add(id.toLowerCase());
+        }
+      }
+
+      if (recordGuids.size >= MAX_USER_AUDIT_RECORDS) break;
+
+      const nextLink = json["@odata.nextLink"];
+      if (!nextLink) break;
+      try {
+        const parsed = new URL(nextLink);
+        if (parsed.origin !== window.location.origin) break;
+        nextUrl = nextLink;
+      } catch {
+        break;
       }
     }
+  } catch { /* entity table query failed — will rely on Source 2 */ }
 
-    if (recordGuids.size >= MAX_USER_AUDIT_RECORDS) break;
-
-    const nextLink = json["@odata.nextLink"];
-    if (!nextLink) break;
+  // ── Source 2: Audit entity direct query ──────────────────────────────────────
+  // Catches records where the user made an intermediate edit (and was NOT the
+  // final modifier). Requires direct read access to the audit entity table
+  // (typically System Admin or prvReadAudit). Silently skipped when denied.
+  if (recordGuids.size < MAX_USER_AUDIT_RECORDS) {
     try {
-      const parsed = new URL(nextLink);
-      if (parsed.origin !== window.location.origin) break;
-      nextUrl = nextLink;
-    } catch {
-      break;
-    }
+      // objecttypecode is an integer in Dataverse — use the numeric value from
+      // entity metadata, NOT the string logical name (which never matches).
+      const auditMeta = await fetchEntityMetadata(entityLogicalName);
+      const objectTypeCode = auditMeta.objectTypeCode;
+      if (objectTypeCode === null) throw new Error("objectTypeCode unavailable");
+
+      let auditFilter =
+        `_userid_value eq ${userGuid} and objecttypecode eq ${objectTypeCode}`;
+      if (dateFrom) {
+        auditFilter += ` and createdon ge ${new Date(`${dateFrom}T00:00:00`).toISOString()}`;
+      }
+      if (dateTo) {
+        auditFilter += ` and createdon le ${new Date(`${dateTo}T23:59:59.999`).toISOString()}`;
+      }
+
+      let nextUrl =
+        `${getOrgUri()}/api/data/v${API_VERSION}/audits` +
+        `?$filter=${auditFilter}&$select=_objectid_value`;
+
+      for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
+        const resp = await fetch(nextUrl, {
+          method: "GET",
+          credentials: "include",
+          headers: ODATA_HEADERS,
+        });
+
+        if (!resp.ok) break; // access denied or unsupported — stop silently
+
+        const json = await resp.json();
+        for (const record of json.value ?? []) {
+          const objId = record._objectid_value;
+          if (typeof objId === "string" && GUID_PATTERN.test(objId)) {
+            recordGuids.add(objId.toLowerCase());
+          }
+        }
+
+        if (recordGuids.size >= MAX_USER_AUDIT_RECORDS) break;
+
+        const nextLink = json["@odata.nextLink"];
+        if (!nextLink) break;
+        try {
+          const parsed = new URL(nextLink);
+          if (parsed.origin !== window.location.origin) break;
+          nextUrl = nextLink;
+        } catch {
+          break;
+        }
+      }
+    } catch { /* audit entity access unavailable — silently ignored */ }
   }
 
   return [...recordGuids].slice(0, MAX_USER_AUDIT_RECORDS);
@@ -1379,6 +1494,21 @@ chrome.runtime.onMessage.addListener(
           fetchAuditHistoryBatch(entitySetName, guids),
           fetchRecordNames(entitySetName, guids, meta.primaryName),
         ]);
+
+        // Collect all unique user GUIDs across all results, then batch-fetch once.
+        const allUserGuids = new Set();
+        for (const result of rawResults) {
+          if (result.error) continue;
+          const details = result.data?.AuditDetailCollection?.AuditDetails ?? [];
+          for (const d of details) {
+            const uid = d.AuditRecord?.["_userid_value"];
+            if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
+              allUserGuids.add(uid.toLowerCase());
+            }
+          }
+        }
+        const sharedUserNameMap = await fetchUserDisplayNames(allUserGuids);
+
         const allRows = [];
 
         for (const result of rawResults) {
@@ -1402,6 +1532,7 @@ chrome.runtime.onMessage.addListener(
             entityLogicalName,
             result.data,
             recordName,
+            sharedUserNameMap,
           );
           allRows.push(...rows);
         }
@@ -1502,6 +1633,10 @@ function handleAuditExportPort(port) {
       const meta = await fetchEntityMetadata(entityLogicalName);
       const nameMap = await fetchRecordNames(entitySetName, guids, meta.primaryName);
 
+      // Shared user name cache — populated incrementally as records are processed
+      // so we make O(unique users) API calls instead of O(records × users).
+      const sharedUserNameMap = new Map();
+
       const total = guids.length;
       let done = 0;
       const allRows = [];
@@ -1518,7 +1653,9 @@ function handleAuditExportPort(port) {
         } catch (err) {
           const status = err instanceof ApiError ? err.status : undefined;
           let errorMsg = err.message ?? String(err);
-          if (status === 403) {
+          if (status === 401) {
+            errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
+          } else if (status === 403) {
             errorMsg =
               'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
           } else if (status === 404) {
@@ -1541,11 +1678,19 @@ function handleAuditExportPort(port) {
           });
         } else {
           try {
+            // Collect user GUIDs from this record and batch-fetch any we haven't seen yet.
+            const auditDetails = result.data?.AuditDetailCollection?.AuditDetails ?? [];
+            const newGuids = collectUserGuids(auditDetails);
+            if (newGuids.size > 0) {
+              await fetchUserDisplayNames(newGuids, sharedUserNameMap);
+            }
+
             const rows = await formatAuditResults(
               result.guid,
               entityLogicalName,
               result.data,
               nameMap.get(result.guid) ?? "",
+              sharedUserNameMap,
             );
             // C3 fix: enforce row cap at the source to prevent tab OOM.
             if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
@@ -1650,6 +1795,9 @@ function handleUserAuditExportPort(port) {
       const meta = await fetchEntityMetadata(entityLogicalName);
       const nameMap = await fetchRecordNames(entitySetName, recordGuids, meta.primaryName);
 
+      // Shared user name cache across all records in this export.
+      const sharedUserNameMap = new Map();
+
       const total = recordGuids.length;
       let done = 0;
       const allRows = [];
@@ -1664,7 +1812,9 @@ function handleUserAuditExportPort(port) {
         } catch (err) {
           const status = err instanceof ApiError ? err.status : undefined;
           let errorMsg = err.message ?? String(err);
-          if (status === 403) {
+          if (status === 401) {
+            errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
+          } else if (status === 403) {
             errorMsg =
               'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
           } else if (status === 404) {
@@ -1699,11 +1849,19 @@ function handleUserAuditExportPort(port) {
               };
             }
 
+            // Collect user GUIDs and batch-fetch any we haven't seen yet.
+            const details = filteredData.AuditDetailCollection?.AuditDetails ?? [];
+            const newGuids = collectUserGuids(details);
+            if (newGuids.size > 0) {
+              await fetchUserDisplayNames(newGuids, sharedUserNameMap);
+            }
+
             const rows = await formatAuditResults(
               result.guid,
               entityLogicalName,
               filteredData,
               nameMap.get(result.guid) ?? "",
+              sharedUserNameMap,
             );
 
             if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {

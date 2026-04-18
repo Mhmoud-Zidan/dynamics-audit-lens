@@ -65,9 +65,9 @@ For each discovered record GUID (max 5 concurrent), the extension:
 
 ```javascript
 function filterAuditDetailsByUser(auditDetails, userGuid, dateFrom, dateTo) {
-  // Convert date range to timestamps
-  const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00Z`).getTime() : -Infinity;
-  const toMs = dateTo ? new Date(`${dateTo}T23:59:59Z`).getTime() : Infinity;
+  // Convert date range to timestamps (local timezone to match <input type="date"> values)
+  const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : -Infinity;
+  const toMs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : Infinity;
 
   return auditDetails.filter((detail) => {
     const auditRecord = detail.AuditRecord ?? {};
