@@ -746,6 +746,15 @@ aboutModal.addEventListener("click", (e) => {
   }
 });
 
+// External links inside About modal
+document.getElementById("linkedin-btn").addEventListener("click", () => {
+  chrome.tabs.create({ url: "https://www.linkedin.com/in/mahmoudzidan55" });
+});
+
+document.getElementById("github-repo-btn").addEventListener("click", () => {
+  chrome.tabs.create({ url: "https://github.com/Mhmoud-Zidan/dynamics-audit-lens/releases" });
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   loadTheme();
   fetchContext();

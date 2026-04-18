@@ -866,7 +866,7 @@ body {
 
 .modal__info-secondary {
   font-size: 10px;
-  color: var(--color-muted);
+  color: var(--color-text-2);
 }
 
 .modal__info-mono {
