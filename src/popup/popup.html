@@ -23,35 +23,213 @@
         <div class="header__text">
           <h1 class="header__title">Dynamics Audit Lens</h1>
         </div>
+        <div class="settings-container">
+          <button id="settings-btn" class="settings-btn" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+              <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+          <div id="settings-menu" class="settings-menu" hidden>
+            <button id="theme-toggle-btn" class="settings-menu__item">
+              <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 5.404a.75.75 0 1 0-1.06-1.06l-1.061 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM6.464 14.596a.75.75 0 1 0-1.06-1.06l-1.06 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM5 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 5 10ZM14.596 15.657a.75.75 0 0 0 1.06-1.06l-1.06-1.061a.75.75 0 1 0-1.06 1.06l1.06 1.06ZM5.404 6.464a.75.75 0 0 0 1.06-1.06l-1.06-1.06a.75.75 0 0 0-1.06 1.06l1.06 1.06Z"/></svg>
+              <span id="theme-label">Light Mode</span>
+            </button>
+            <div class="settings-menu__sep"></div>
+            <button id="about-btn" class="settings-menu__item">
+              <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd"/></svg>
+              <span>About</span>
+            </button>
+          </div>
+        </div>
       </header>
 
-      <main id="main-content" class="main">
-        <p id="status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+      <nav class="tabs">
+        <button class="tab tab--active" data-tab="records">Records</button>
+        <button class="tab" data-tab="user">Users</button>
+      </nav>
 
-        <div id="record-info" class="record-info" hidden>
-          <span id="record-count" class="record-info__count">0 records selected</span>
-          <span id="entity-name" class="record-info__entity"></span>
+      <main class="main">
+        <div id="tab-records" class="tab-panel tab-panel--active">
+          <p id="status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+
+          <div id="record-info" class="record-info" hidden>
+            <span id="record-count" class="record-info__count">0 records selected</span>
+            <span id="entity-name" class="record-info__entity"></span>
+          </div>
+
+          <button id="export-btn" class="btn btn--primary" disabled>
+            <svg class="btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+              <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
+              <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
+            </svg>
+            Export to Excel
+          </button>
+
+          <div id="progress-section" class="progress-section" hidden>
+            <div class="progress-bar">
+              <div id="progress-fill" class="progress-bar__fill"></div>
+            </div>
+            <p id="progress-text" class="progress-text">Preparing…</p>
+          </div>
         </div>
 
-        <button id="export-btn" class="btn btn--primary" disabled>
-          <svg class="btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
-            <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
-            <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
-          </svg>
-          Export to Excel
-        </button>
+        <div id="tab-user" class="tab-panel" hidden>
+          <p id="user-status-msg" class="status status--idle">Waiting for Dynamics page…</p>
 
-        <div id="progress-section" class="progress-section" hidden>
-          <div class="progress-bar">
-            <div id="progress-fill" class="progress-bar__fill"></div>
+          <div class="search-container">
+            <input
+              type="text"
+              id="entity-search-input"
+              class="search-input"
+              placeholder="Entity name (e.g. account, contact…)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div id="entity-search-dropdown" class="search-dropdown" hidden></div>
           </div>
-          <p id="progress-text" class="progress-text">Preparing…</p>
+
+          <div class="search-container">
+            <input
+              type="text"
+              id="user-search-input"
+              class="search-input"
+              placeholder="Search user by name or email…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div id="user-search-dropdown" class="search-dropdown" hidden></div>
+          </div>
+
+          <div id="selected-user" class="selected-user" hidden>
+            <span id="selected-user-name" class="selected-user__name"></span>
+            <button id="clear-user-btn" class="selected-user__clear" title="Remove">&times;</button>
+          </div>
+
+          <div class="date-range">
+            <label class="date-field">
+              <span class="date-label">From</span>
+              <input type="date" id="date-from" class="date-input" />
+            </label>
+            <label class="date-field">
+              <span class="date-label">To</span>
+              <input type="date" id="date-to" class="date-input" />
+            </label>
+          </div>
+
+          <button id="user-export-btn" class="btn btn--primary" disabled>
+            <svg class="btn__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+              <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
+              <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
+            </svg>
+            Export User Audit
+          </button>
+
+          <div id="user-progress-section" class="progress-section" hidden>
+            <div class="progress-bar">
+              <div id="user-progress-fill" class="progress-bar__fill"></div>
+            </div>
+            <p id="user-progress-text" class="progress-text">Preparing…</p>
+          </div>
         </div>
       </main>
 
       <footer class="footer">
         <span class="footer__note">All data stays in your browser.</span>
       </footer>
+    </div>
+
+    <div id="about-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal__header">
+          <h2 class="modal__title">About</h2>
+          <button id="about-close-btn" class="modal__close" title="Close">&times;</button>
+        </div>
+        <div class="modal__body">
+
+          <!-- ── Hero ── -->
+          <div class="modal__hero">
+            <img src="../../icons/icon48.png" alt="" class="modal__hero-logo" />
+            <div class="modal__hero-info">
+              <div class="modal__hero-name">Dynamics Audit Lens</div>
+              <div class="modal__hero-badges">
+                <span class="modal__badge modal__badge--version">v1.0.2</span>
+                <span class="modal__badge modal__badge--oss">Open Source</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="modal__desc">
+            Local-only audit export for Microsoft Dynamics&nbsp;365 &amp; Dataverse.
+            Zero data exfiltration &mdash; all processing stays in your browser.
+          </p>
+
+          <!-- ── Author ── -->
+          <div class="modal__section">
+            <span class="modal__section-label">Author</span>
+            <div class="modal__info-card">
+              <div class="modal__avatar">Z</div>
+              <div class="modal__info-text">
+                <span class="modal__info-primary">Mahmoud Zidan</span>
+                <span class="modal__info-secondary">Open Source Developer</span>
+              </div>
+              <button id="linkedin-btn" class="modal__link-btn" title="LinkedIn Profile" aria-label="Open LinkedIn profile">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14Zm-1.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.86 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.79.64-1.44 1.43-1.44a1.44 1.44 0 0 1 1.44 1.44v4.93h2.71ZM6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68Zm1.39 9.94v-8.37H5.5v8.37h2.77Z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- ── Contact ── -->
+          <div class="modal__section">
+            <span class="modal__section-label">Contact</span>
+            <div class="modal__info-card">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" class="modal__contact-icon" aria-hidden="true">
+                <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.185 6.839 9.504.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.025 10.025 0 0 0 22 12.021C22 6.484 17.522 2 12 2Z"/>
+              </svg>
+              <div class="modal__info-text">
+                <span class="modal__info-primary">GitHub</span>
+                <span class="modal__info-secondary modal__info-mono">@Mhmoud-Zidan</span>
+              </div>
+              <button id="github-repo-btn" class="modal__link-btn" title="Open repository" aria-label="Open GitHub repository">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5ZM10 2.75a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0V4.56l-5.97 5.97a.75.75 0 0 1-1.06-1.06L15.44 3.5h-4.69a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- ── License ── -->
+          <div class="modal__section">
+            <span class="modal__section-label">License</span>
+            <div class="modal__info-card modal__info-card--license">
+              <span class="modal__badge modal__badge--mit">MIT</span>
+              <div class="modal__info-text">
+                <span class="modal__info-primary">MIT License</span>
+                <span class="modal__info-secondary">Free &amp; Open Source &mdash; No warranty</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Legal text ── -->
+          <div class="modal__section">
+            <span class="modal__section-label">Legal</span>
+            <p class="modal__legal">
+              THE SOFTWARE IS PROVIDED &ldquo;AS IS&rdquo;, WITHOUT WARRANTY OF ANY KIND,
+              EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+              MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+              IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+              CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+              TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+              SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+            </p>
+          </div>
+
+          <!-- ── Footer ── -->
+          <p class="modal__copyright">&copy; 2026 Mahmoud Zidan &mdash; Free &amp; Open Source Software</p>
+
+        </div>
+      </div>
     </div>
 
     <!-- Module script — processed by Vite / @crxjs -->

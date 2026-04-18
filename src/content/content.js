@@ -1,4 +1,4 @@
-﻿/**
+/**
  * content.js — Isolated-world content script.
  *
  * ARCHITECTURE OVERVIEW
@@ -216,6 +216,8 @@ function requestFreshContext() {
 const API_VERSION = "9.2";
 const MAX_CONCURRENT = 5;
 const MAX_EXPORT_ROWS = 100_000;
+const MAX_USER_AUDIT_RECORDS = 500;
+const MAX_AUDIT_QUERY_PAGES = 20;
 
 /**
  * Standard OData headers required by the Dataverse REST endpoint.
@@ -542,6 +544,8 @@ async function fetchAuditHistoryBatch(entitySetName, guids) {
  * @typedef {object} EntityMeta
  * @property {string}              primaryId   Logical name of the PK attribute.
  * @property {string|null}          primaryName Logical name of the primary name attribute.
+ * @property {string|null}          entitySetName Plural entity set name for API URLs.
+ * @property {number|null}          objectTypeCode Integer type code used in audit filters.
  * @property {Map<string,AttrMeta>} attributes logicalName → AttrMeta.
  * @property {Map<number,string>}   byColumn   ColumnNumber → logicalName (for attributemask).
  */
@@ -654,7 +658,7 @@ async function fetchEntityMetadata(entityLogicalName) {
 
   const attrUrl =
     `${entityBase}` +
-    `?$select=LogicalName,PrimaryIdAttribute,PrimaryNameAttribute,EntitySetName` +
+    `?$select=LogicalName,PrimaryIdAttribute,PrimaryNameAttribute,EntitySetName,ObjectTypeCode` +
     `&$expand=Attributes($select=LogicalName,DisplayName,AttributeType,ColumnNumber)`;
 
   // Fire all requests in parallel.
@@ -729,6 +733,9 @@ async function fetchEntityMetadata(entityLogicalName) {
     primaryId: entityJson.PrimaryIdAttribute ?? `${entityLogicalName}id`,
     primaryName: entityJson.PrimaryNameAttribute ?? null,
     entitySetName: entityJson.EntitySetName ?? null,
+    objectTypeCode: typeof entityJson.ObjectTypeCode === "number"
+      ? entityJson.ObjectTypeCode
+      : null,
     attributes,
     byColumn,
   };
@@ -1091,6 +1098,204 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordN
   return rows;
 }
 
+// ── User search ───────────────────────────────────────────────────────────────
+
+async function searchUsers(query) {
+  if (typeof query !== "string" || query.trim().length < 2) return [];
+
+  const sanitized = query.trim().replace(/'/g, "''");
+  const url =
+    `${getOrgUri()}/api/data/v${API_VERSION}/systemusers` +
+    `?$filter=contains(fullname,'${sanitized}') or contains(internalemailaddress,'${sanitized}')` +
+    `&$select=systemuserid,fullname,internalemailaddress&$top=15`;
+
+  try {
+    const response = await fetchWithRetry(() =>
+      fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+    );
+    const json = await response.json();
+    return (json.value ?? []).map((u) => ({
+      id: u.systemuserid ?? "",
+      fullname: u.fullname ?? "",
+      email: u.internalemailaddress ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Entity search ─────────────────────────────────────────────────────────────
+
+/** Full entity list cached after first fetch. */
+let entityListCache = null;
+
+/**
+ * Search entities by display name OR logical name.
+ *
+ * Dataverse EntityDefinitions does not support $filter on DisplayName (complex
+ * type), so we fetch the full entity list once, cache it, and filter locally
+ * — the same pattern used by user search with contains(fullname,...).
+ */
+async function searchEntities(query) {
+  if (typeof query !== "string" || query.trim().length < 2) return [];
+
+  // Fetch and cache the full entity list on first call.
+  if (!entityListCache) {
+    try {
+      const url =
+        `${getOrgUri()}/api/data/v${API_VERSION}/EntityDefinitions` +
+        `?$select=LogicalName,DisplayName,EntitySetName`;
+      const response = await fetchWithRetry(() =>
+        fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+      );
+      const json = await response.json();
+      entityListCache = (json.value ?? []).map((e) => ({
+        logicalName: e.LogicalName ?? "",
+        displayName:
+          e.DisplayName?.UserLocalizedLabel?.Label ?? e.LogicalName ?? "",
+        entitySetName: e.EntitySetName ?? null,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  const lowerQuery = query.trim().toLowerCase();
+
+  const matched = entityListCache.filter((e) => {
+    const ln = e.logicalName.toLowerCase();
+    const dn = e.displayName.toLowerCase();
+    return ln.includes(lowerQuery) || dn.includes(lowerQuery);
+  });
+
+  matched.sort((a, b) => {
+    const aStartsD = a.displayName.toLowerCase().startsWith(lowerQuery) ? 0
+      : a.displayName.toLowerCase().includes(lowerQuery) ? 1 : 2;
+    const bStartsD = b.displayName.toLowerCase().startsWith(lowerQuery) ? 0
+      : b.displayName.toLowerCase().includes(lowerQuery) ? 1 : 2;
+    const aStartsL = a.logicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+    const bStartsL = b.logicalName.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+
+    const aScore = Math.min(aStartsD, aStartsL);
+    const bScore = Math.min(bStartsD, bStartsL);
+    if (aScore !== bScore) return aScore - bScore;
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  return matched.slice(0, 20);
+}
+
+// ── User audit record discovery ───────────────────────────────────────────────
+
+/**
+ * Query the Dataverse audit entityset to discover which record GUIDs a user
+ * has touched for a given entity, optionally within a date range.
+ *
+ * Strategy:
+ *   1. Query /audit?$filter=_userid_value eq {userGuid} and
+ *      objecttypecode eq '{entityLogicalName}' [and date filters]
+ *   2. Paginate through results, collecting unique _objectid_value GUIDs.
+ *   3. Cap at MAX_USER_AUDIT_RECORDS unique records.
+ *
+ * @param {string}      entityLogicalName  e.g. "account"
+ * @param {string}      userGuid           Bare GUID of the target user.
+ * @param {string|null} dateFrom           ISO date string "YYYY-MM-DD" or null.
+ * @param {string|null} dateTo             ISO date string "YYYY-MM-DD" or null.
+ * @returns {Promise<string[]>}            Array of unique record GUIDs.
+ */
+async function fetchUserAuditRecordGuids(entityLogicalName, userGuid, dateFrom, dateTo) {
+  assertEntityLogicalName(entityLogicalName);
+  assertGuid(userGuid);
+
+  // objecttypecode is Edm.String in the Dataverse audit entity — it stores the
+  // entity logical name (e.g. "account"), not the integer ObjectTypeCode.
+  let filter = `_userid_value eq ${userGuid} and objecttypecode eq '${entityLogicalName}'`;
+
+  // Convert local calendar dates to UTC for OData comparison.
+  // HTML <input type="date"> gives local dates — we must not treat them as UTC.
+  if (dateFrom) {
+    const utcFrom = new Date(`${dateFrom}T00:00:00`).toISOString();
+    filter += ` and createdon ge ${utcFrom}`;
+  }
+  if (dateTo) {
+    const utcTo = new Date(`${dateTo}T23:59:59.999`).toISOString();
+    filter += ` and createdon le ${utcTo}`;
+  }
+
+  const baseUrl =
+    `${getOrgUri()}/api/data/v${API_VERSION}/audits` +
+    `?$filter=${filter}` +
+    `&$select=_objectid_value`;
+
+  const recordGuids = new Set();
+  let nextUrl = baseUrl;
+
+  for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
+    const response = await fetchWithRetry(() =>
+      fetch(nextUrl, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+    );
+    const json = await response.json();
+
+    for (const record of json.value ?? []) {
+      const objId = record._objectid_value;
+      if (typeof objId === "string" && GUID_PATTERN.test(objId)) {
+        recordGuids.add(objId.toLowerCase());
+      }
+    }
+
+    if (recordGuids.size >= MAX_USER_AUDIT_RECORDS) break;
+
+    const nextLink = json["@odata.nextLink"];
+    if (!nextLink) break;
+    try {
+      const parsed = new URL(nextLink);
+      if (parsed.origin !== window.location.origin) break;
+      nextUrl = nextLink;
+    } catch {
+      break;
+    }
+  }
+
+  return [...recordGuids].slice(0, MAX_USER_AUDIT_RECORDS);
+}
+
+// ── Audit detail filtering by user ────────────────────────────────────────────
+
+/**
+ * Filter raw AuditDetails to only those matching a specific user and date range.
+ * Applied after RetrieveRecordChangeHistory returns full history for a record.
+ *
+ * @param {object[]}    auditDetails  Array of AuditDetail objects.
+ * @param {string}      userGuid      Target user GUID (lowercase).
+ * @param {string|null} dateFrom      ISO date string or null.
+ * @param {string|null} dateTo        ISO date string or null.
+ * @returns {object[]}  Filtered AuditDetail subset.
+ */
+function filterAuditDetailsByUser(auditDetails, userGuid, dateFrom, dateTo) {
+  // Parse dates as LOCAL midnight / end-of-day (no Z suffix → local timezone).
+  const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : -Infinity;
+  const toMs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : Infinity;
+
+  return auditDetails.filter((detail) => {
+    const auditRecord = detail.AuditRecord ?? {};
+    const userId = auditRecord["_userid_value"];
+
+    if (typeof userId === "string") {
+      if (userId.toLowerCase() !== userGuid.toLowerCase()) return false;
+    } else {
+      return false;
+    }
+
+    const rawDate = auditRecord.createdon;
+    if (rawDate) {
+      const ts = new Date(rawDate).getTime();
+      if (Number.isFinite(ts) && (ts < fromMs || ts > toMs)) return false;
+    }
+
+    return true;
+  });
+}
+
 // ── Extension message router ──────────────────────────────────────────────────
 
 /**
@@ -1113,7 +1318,9 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordN
  *     Response: { ok: true, alive: true }
  */
 chrome.runtime.onMessage.addListener(
-  function onExtensionMessage(message, _sender, sendResponse) {
+  function onExtensionMessage(message, sender, sendResponse) {
+    // Reject messages not originating from this extension.
+    if (sender.id !== chrome.runtime.id) return false;
     if (message.type === "GET_CONTEXT") {
       requestFreshContext()
         .then((context) => sendResponse({ ok: true, context }))
@@ -1211,6 +1418,34 @@ chrome.runtime.onMessage.addListener(
       sendResponse({ ok: true, alive: true });
       return false;
     }
+
+    if (message.type === "SEARCH_USERS") {
+      const { query } = message;
+      if (typeof query !== "string" || query.trim().length < 2) {
+        sendResponse({ ok: false, error: "Query must be at least 2 characters." });
+        return false;
+      }
+      searchUsers(query)
+        .then((users) => sendResponse({ ok: true, users }))
+        .catch((err) =>
+          sendResponse({ ok: false, error: err.message ?? String(err) }),
+        );
+      return true;
+    }
+
+    if (message.type === "SEARCH_ENTITIES") {
+      const { query } = message;
+      if (typeof query !== "string" || query.trim().length < 2) {
+        sendResponse({ ok: false, error: "Query must be at least 2 characters." });
+        return false;
+      }
+      searchEntities(query)
+        .then((entities) => sendResponse({ ok: true, entities }))
+        .catch((err) =>
+          sendResponse({ ok: false, error: err.message ?? String(err) }),
+        );
+      return true;
+    }
   },
 );
 
@@ -1221,7 +1456,20 @@ chrome.runtime.onMessage.addListener(
 // progress messages back through the port so the popup can update a progress bar.
 
 chrome.runtime.onConnect.addListener(function onPortConnect(port) {
-  if (port.name !== "audit-export") return;
+  if (port.name === "audit-export") {
+    handleAuditExportPort(port);
+    return;
+  }
+
+  if (port.name === "user-audit-export") {
+    handleUserAuditExportPort(port);
+    return;
+  }
+});
+
+// ── Record audit export port handler ──────────────────────────────────────────
+
+function handleAuditExportPort(port) {
 
   // C1 fix: track connection state so workers abort when the popup closes.
   let portAlive = true;
@@ -1348,7 +1596,158 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
       }
     }
   });
-});
+}
+
+// ── User audit export port handler ────────────────────────────────────────────
+
+function handleUserAuditExportPort(port) {
+  let portAlive = true;
+  port.onDisconnect.addListener(() => { portAlive = false; });
+
+  port.onMessage.addListener(async function onUserPortMessage(msg) {
+    const { entityLogicalName, userGuid, dateFrom, dateTo } = msg ?? {};
+    if (
+      typeof entityLogicalName !== "string" ||
+      typeof userGuid !== "string" ||
+      !GUID_PATTERN.test(userGuid)
+    ) {
+      port.postMessage({ type: "error", error: "Invalid payload." });
+      return;
+    }
+
+    try {
+      if (portAlive) {
+        port.postMessage({ type: "phase", text: "Discovering records touched by user\u2026" });
+      }
+
+      const recordGuids = await fetchUserAuditRecordGuids(
+        entityLogicalName,
+        userGuid,
+        dateFrom || null,
+        dateTo || null,
+      );
+
+      if (recordGuids.length === 0) {
+        if (portAlive) port.postMessage({ type: "done", rows: [] });
+        return;
+      }
+
+      if (portAlive) {
+        port.postMessage({
+          type: "phase",
+          text: `Found ${recordGuids.length} record${recordGuids.length !== 1 ? "s" : ""}. Fetching audit history\u2026`,
+        });
+      }
+
+      let entitySetName;
+      try {
+        entitySetName = await resolveEntitySetName(entityLogicalName);
+      } catch (err) {
+        if (portAlive) port.postMessage({ type: "error", error: err.message });
+        return;
+      }
+
+      const meta = await fetchEntityMetadata(entityLogicalName);
+      const nameMap = await fetchRecordNames(entitySetName, recordGuids, meta.primaryName);
+
+      const total = recordGuids.length;
+      let done = 0;
+      const allRows = [];
+      let rowCapHit = false;
+
+      const tasks = recordGuids.map((guid) => async () => {
+        if (!portAlive) return;
+
+        let result;
+        try {
+          result = await fetchAuditHistoryForRecord(entitySetName, guid);
+        } catch (err) {
+          const status = err instanceof ApiError ? err.status : undefined;
+          let errorMsg = err.message ?? String(err);
+          if (status === 403) {
+            errorMsg =
+              'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+          } else if (status === 404) {
+            errorMsg = "Record not found \u2014 it may have been deleted.";
+          }
+          result = { guid, entitySetName, error: errorMsg, status };
+        }
+
+        if (result.error) {
+          allRows.push({
+            RecordID: result.guid,
+            RecordName: nameMap.get(result.guid) ?? "",
+            ChangedBy: "",
+            ChangedDate: "",
+            Operation: "FETCH_ERROR",
+            FieldName: "",
+            OldValue: "",
+            NewValue: result.error,
+          });
+        } else {
+          try {
+            // Filter AuditDetails to only those matching the target user and date range
+            const filteredData = { ...result.data };
+            if (filteredData.AuditDetailCollection) {
+              filteredData.AuditDetailCollection = {
+                AuditDetails: filterAuditDetailsByUser(
+                  filteredData.AuditDetailCollection.AuditDetails ?? [],
+                  userGuid,
+                  dateFrom || null,
+                  dateTo || null,
+                ),
+              };
+            }
+
+            const rows = await formatAuditResults(
+              result.guid,
+              entityLogicalName,
+              filteredData,
+              nameMap.get(result.guid) ?? "",
+            );
+
+            if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
+              allRows.push(...rows);
+            } else if (!rowCapHit) {
+              const remaining = MAX_EXPORT_ROWS - allRows.length;
+              if (remaining > 0) allRows.push(...rows.slice(0, remaining));
+              rowCapHit = true;
+            }
+          } catch (fmtErr) {
+            allRows.push({
+              RecordID: result.guid,
+              RecordName: nameMap.get(result.guid) ?? "",
+              ChangedBy: "",
+              ChangedDate: "",
+              Operation: "FORMAT_ERROR",
+              FieldName: "",
+              OldValue: "",
+              NewValue: fmtErr.message ?? String(fmtErr),
+            });
+          }
+        }
+
+        done++;
+        if (portAlive) {
+          try {
+            port.postMessage({ type: "progress", done, total });
+          } catch { /* port closed */ }
+        }
+      });
+
+      await runPool(tasks, MAX_CONCURRENT);
+      if (portAlive) {
+        port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
+      }
+    } catch (err) {
+      if (portAlive) {
+        try {
+          port.postMessage({ type: "error", error: err.message ?? String(err) });
+        } catch { /* port closed */ }
+      }
+    }
+  });
+}
 
 // ── Initialisation ────────────────────────────────────────────────────────────
 
