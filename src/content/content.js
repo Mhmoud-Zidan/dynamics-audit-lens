@@ -52,6 +52,7 @@
 const T_READY = "__DAL__BRIDGE_READY";
 const T_REQUEST = "__DAL__CONTEXT_REQUEST";
 const T_RESPONSE = "__DAL__CONTEXT_RESPONSE";
+const T_FILL_DATA_RESPONSE = "__DAL__FILL_DATA_RESPONSE";
 
 /**
  * The origin we expect on all postMessages from the bridge.
@@ -69,6 +70,9 @@ let cachedContext = null;
 
 /** True once the <script> element has been appended. */
 let bridgeInjected = false;
+
+/** Pending fill-data bridge response. { resolve, timer } */
+let pendingFillRequest = null;
 
 // ── Bridge injection ──────────────────────────────────────────────────────────
 
@@ -140,6 +144,14 @@ window.addEventListener("message", function onBridgeMessage(event) {
       const { resolve, timer } = pendingRequests.shift();
       clearTimeout(timer);
       resolve(payload);
+    }
+  }
+
+  if (type === T_FILL_DATA_RESPONSE && payload) {
+    if (pendingFillRequest) {
+      clearTimeout(pendingFillRequest.timer);
+      pendingFillRequest.resolve(payload);
+      pendingFillRequest = null;
     }
   }
 });
@@ -400,6 +412,16 @@ function getOrgUri() {
   return window.location.origin; // e.g. "https://contoso.crm.dynamics.com"
 }
 
+function pushRowsSafe(allRows, rows, maxRows, onCap) {
+  if (allRows.length + rows.length <= maxRows) {
+    for (let i = 0; i < rows.length; i++) allRows.push(rows[i]);
+  } else {
+    const remaining = maxRows - allRows.length;
+    for (let i = 0; i < remaining; i++) allRows.push(rows[i]);
+    onCap();
+  }
+}
+
 // ── Single-record audit fetch ─────────────────────────────────────────────────
 
 /**
@@ -450,7 +472,7 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
 
     const json = await response.json();
     const details = json?.AuditDetailCollection?.AuditDetails ?? [];
-    allDetails = allDetails.concat(details);
+    allDetails.push(...details);
 
     const nextLink = json["@odata.nextLink"];
     if (!nextLink) break;
@@ -468,54 +490,6 @@ async function fetchAuditHistoryForRecord(entitySetName, guid) {
   // Reconstruct the expected response shape with all pages merged.
   const data = { AuditDetailCollection: { AuditDetails: allDetails } };
   return { guid, entitySetName, data };
-}
-
-// ── Batch fetch with concurrency limiter ──────────────────────────────────────
-
-/**
- * Fetch audit history for multiple record GUIDs, with at most MAX_CONCURRENT
- * simultaneous HTTP requests in-flight.
- *
- * Records that fail (network error, 403, 404, …) are captured as
- * `{ guid, entitySetName, error: string }` objects so one bad record does NOT
- * abort the whole batch.
- *
- * @param {string}   entitySetName  Plural entity set name, e.g. "accounts"
- * @param {string[]} guids          Array of bare, lowercase GUIDs
- * @returns {Promise<Array<AuditResult>>}
- *
- * @typedef {{ guid: string, entitySetName: string, data: object }
- *           | { guid: string, entitySetName: string, error: string, status?: number }} AuditResult
- */
-async function fetchAuditHistoryBatch(entitySetName, guids) {
-  if (!Array.isArray(guids) || guids.length === 0) return [];
-
-  // Build one task-factory per GUID.
-  const tasks = guids.map((guid) => async () => {
-    try {
-      return await fetchAuditHistoryForRecord(entitySetName, guid);
-    } catch (err) {
-      // Capture per-record failures; don't let one record block others.
-      const status = err instanceof ApiError ? err.status : undefined;
-      let errorMsg = err.message ?? String(err);
-      if (status === 401) {
-        errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
-      } else if (status === 403) {
-        errorMsg =
-          'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
-      } else if (status === 404) {
-        errorMsg = "Record not found \u2014 it may have been deleted.";
-      }
-      return {
-        guid,
-        entitySetName,
-        error: errorMsg,
-        status,
-      };
-    }
-  });
-
-  return runPool(tasks, MAX_CONCURRENT);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1089,10 +1063,10 @@ async function formatAuditResults(guid, entityLogicalName, rawAuditData, recordN
 
     // Use mask-decoded names if available; otherwise fall back to key diffing.
     // Either way, also include diffKeys so we never miss fields.
-    const changedFields =
-      maskNames.length > 0
-        ? [...new Set([...maskNames, ...diffKeys])]
-        : [...diffKeys];
+    const changedFields = new Set(diffKeys);
+    if (maskNames.length > 0) {
+      for (const n of maskNames) changedFields.add(n);
+    }
 
     // ── One row per changed field ───────────────────────────────────────────
     for (const logicalName of changedFields) {
@@ -1267,6 +1241,10 @@ async function fetchUserAuditRecordGuids(entityLogicalName, userGuid, dateFrom, 
   assertEntityLogicalName(entityLogicalName);
   assertGuid(userGuid);
 
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateFrom && !DATE_RE.test(dateFrom)) throw new Error("Invalid dateFrom format");
+  if (dateTo && !DATE_RE.test(dateTo)) throw new Error("Invalid dateTo format");
+
   const recordGuids = new Set();
 
   // ── Source 1: Entity table query ─────────────────────────────────────────────
@@ -1340,11 +1318,9 @@ async function fetchUserAuditRecordGuids(entityLogicalName, userGuid, dateFrom, 
         `?$filter=${auditFilter}&$select=_objectid_value`;
 
       for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
-        const resp = await fetch(nextUrl, {
-          method: "GET",
-          credentials: "include",
-          headers: ODATA_HEADERS,
-        });
+        const resp = await fetchWithRetry(() =>
+          fetch(nextUrl, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+        );
 
         if (!resp.ok) break; // access denied or unsupported — stop silently
 
@@ -1445,109 +1421,43 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (message.type === "FETCH_AUDIT_HISTORY") {
-      const { entitySetName, guids } = message.payload ?? {};
-      if (
-        typeof entitySetName !== "string" ||
-        !Array.isArray(guids) ||
-        guids.length === 0
-      ) {
-        sendResponse({
-          ok: false,
-          error:
-            "Invalid payload: entitySetName (string) and guids (array) are required.",
-        });
+    if (message.type === "FILL_DATA") {
+      if (!EXPECTED_ORIGIN) {
+        sendResponse({ ok: false, error: "Cannot reach page bridge." });
         return false;
       }
-      fetchAuditHistoryBatch(entitySetName, guids)
-        .then((results) => sendResponse({ ok: true, results }))
-        .catch((err) =>
-          sendResponse({ ok: false, error: err.message ?? String(err) }),
-        );
+      var fillScript = document.createElement("script");
+      fillScript.src = chrome.runtime.getURL("src/inject/fill-data.js");
+      fillScript.type = "text/javascript";
+
+      var fillTimer = setTimeout(function () {
+        if (pendingFillRequest) {
+          pendingFillRequest = null;
+          sendResponse({ ok: false, error: "Fill script timed out." });
+        }
+        if (fillScript.parentNode) fillScript.remove();
+      }, 15000);
+
+      pendingFillRequest = {
+        resolve: function (result) {
+          clearTimeout(fillTimer);
+          sendResponse(result);
+        },
+        timer: fillTimer,
+      };
+
+      (document.head || document.documentElement).appendChild(fillScript);
+      fillScript.addEventListener("load", function () { fillScript.remove(); });
+      fillScript.addEventListener("error", function () {
+        fillScript.remove();
+        if (pendingFillRequest) {
+          clearTimeout(fillTimer);
+          pendingFillRequest = null;
+          sendResponse({ ok: false, error: "Failed to load fill script. Check extension permissions." });
+        }
+      });
+
       return true;
-    }
-
-    if (message.type === "FETCH_AND_FORMAT_AUDIT") {
-      let { entityLogicalName, entitySetName, guids } = message.payload ?? {};
-      if (
-        typeof entityLogicalName !== "string" ||
-        !Array.isArray(guids) ||
-        guids.length === 0
-      ) {
-        sendResponse({
-          ok: false,
-          error:
-            "Invalid payload: entityLogicalName (string) and guids (array) are required.",
-        });
-        return false;
-      }
-
-      (async () => {
-        // Auto-resolve entitySetName from metadata if the caller didn't provide it.
-        if (typeof entitySetName !== "string") {
-          entitySetName = await resolveEntitySetName(entityLogicalName);
-        }
-
-        // Fetch record names in parallel with audit data.
-        const meta = await fetchEntityMetadata(entityLogicalName);
-        const [rawResults, nameMap] = await Promise.all([
-          fetchAuditHistoryBatch(entitySetName, guids),
-          fetchRecordNames(entitySetName, guids, meta.primaryName),
-        ]);
-
-        // Collect all unique user GUIDs across all results, then batch-fetch once.
-        const allUserGuids = new Set();
-        for (const result of rawResults) {
-          if (result.error) continue;
-          const details = result.data?.AuditDetailCollection?.AuditDetails ?? [];
-          for (const d of details) {
-            const uid = d.AuditRecord?.["_userid_value"];
-            if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
-              allUserGuids.add(uid.toLowerCase());
-            }
-          }
-        }
-        const sharedUserNameMap = await fetchUserDisplayNames(allUserGuids);
-
-        const allRows = [];
-
-        for (const result of rawResults) {
-          const recordName = nameMap.get(result.guid) ?? "";
-          if (result.error) {
-            // Surface per-record fetch failures as sentinel rows.
-            allRows.push({
-              RecordID: result.guid,
-              RecordName: recordName,
-              ChangedBy: "",
-              ChangedDate: "",
-              Operation: "FETCH_ERROR",
-              FieldName: "",
-              OldValue: "",
-              NewValue: result.error,
-            });
-            continue;
-          }
-          const rows = await formatAuditResults(
-            result.guid,
-            entityLogicalName,
-            result.data,
-            recordName,
-            sharedUserNameMap,
-          );
-          allRows.push(...rows);
-        }
-        return allRows;
-      })()
-        .then((rows) => sendResponse({ ok: true, rows }))
-        .catch((err) =>
-          sendResponse({ ok: false, error: err.message ?? String(err) }),
-        );
-      return true;
-    }
-
-    if (message.type === "PING") {
-      sendResponse({ ok: true, alive: true });
-      return false;
     }
 
     if (message.type === "SEARCH_USERS") {
@@ -1600,13 +1510,89 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
 
 // ── Record audit export port handler ──────────────────────────────────────────
 
+function makeErrorRow(guid, nameMap, operation, message) {
+  return {
+    RecordID: guid,
+    RecordName: nameMap.get(guid) ?? "",
+    ChangedBy: "",
+    ChangedDate: "",
+    Operation: operation,
+    FieldName: "",
+    OldValue: "",
+    NewValue: message,
+  };
+}
+
+function classifyFetchError(err) {
+  const status = err instanceof ApiError ? err.status : undefined;
+  let errorMsg = err.message ?? String(err);
+  if (status === 401) {
+    errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
+  } else if (status === 403) {
+    errorMsg =
+      'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+  } else if (status === 404) {
+    errorMsg = "Record not found \u2014 it may have been deleted.";
+  }
+  return { errorMsg, status };
+}
+
+async function processAuditRecords({ port, portAlive, entitySetName, entityLogicalName, guids, nameMap, sharedUserNameMap, dataTransform }) {
+  const total = guids.length;
+  let done = 0;
+  const allRows = [];
+  let rowCapHit = false;
+
+  const tasks = guids.map((guid) => async () => {
+    if (!portAlive()) return { guid, entitySetName, error: "cancelled" };
+
+    let result;
+    try {
+      result = await fetchAuditHistoryForRecord(entitySetName, guid);
+    } catch (err) {
+      const { errorMsg, status } = classifyFetchError(err);
+      result = { guid, entitySetName, error: errorMsg, status };
+    }
+
+    if (result.error) {
+      allRows.push(makeErrorRow(result.guid, nameMap, "FETCH_ERROR", result.error));
+    } else {
+      try {
+        let data = result.data;
+        if (dataTransform) data = dataTransform(result, data);
+
+        const auditDetails = data?.AuditDetailCollection?.AuditDetails ?? [];
+        const newGuids = collectUserGuids(auditDetails);
+        if (newGuids.size > 0) {
+          await fetchUserDisplayNames(newGuids, sharedUserNameMap);
+        }
+
+        const rows = await formatAuditResults(
+          result.guid, entityLogicalName, data,
+          nameMap.get(result.guid) ?? "", sharedUserNameMap,
+        );
+        pushRowsSafe(allRows, rows, MAX_EXPORT_ROWS, () => { rowCapHit = true; });
+      } catch (fmtErr) {
+        allRows.push(makeErrorRow(result.guid, nameMap, "FORMAT_ERROR", fmtErr.message ?? String(fmtErr)));
+      }
+    }
+
+    done++;
+    if (portAlive()) {
+      try { port.postMessage({ type: "progress", done, total }); } catch { /* port closed */ }
+    }
+    return result;
+  });
+
+  await runPool(tasks, MAX_CONCURRENT);
+  return { allRows, rowCapHit };
+}
+
 function handleAuditExportPort(port) {
 
-  // C1 fix: track connection state so workers abort when the popup closes.
-  let portAlive = true;
-  port.onDisconnect.addListener(() => {
-    portAlive = false;
-  });
+  let alive = true;
+  port.onDisconnect.addListener(() => { alive = false; });
+  const portAlive = () => alive;
 
   port.onMessage.addListener(async function onPortMessage(msg) {
     const { entityLogicalName, guids } = msg ?? {};
@@ -1620,124 +1606,27 @@ function handleAuditExportPort(port) {
     }
 
     try {
-      // Resolve entity set name once.
       let entitySetName;
       try {
         entitySetName = await resolveEntitySetName(entityLogicalName);
       } catch (err) {
-        if (portAlive) port.postMessage({ type: "error", error: err.message });
+        if (portAlive()) port.postMessage({ type: "error", error: err.message });
         return;
       }
 
-      // Pre-fetch record names so they can be included in every row.
       const meta = await fetchEntityMetadata(entityLogicalName);
       const nameMap = await fetchRecordNames(entitySetName, guids, meta.primaryName);
-
-      // Shared user name cache — populated incrementally as records are processed
-      // so we make O(unique users) API calls instead of O(records × users).
       const sharedUserNameMap = new Map();
 
-      const total = guids.length;
-      let done = 0;
-      const allRows = [];
-      let rowCapHit = false;
-
-      // Build task factories for the pool — each task posts progress on completion.
-      const tasks = guids.map((guid) => async () => {
-        // C1: abort early if the popup has disconnected.
-        if (!portAlive) return { guid, entitySetName, error: "cancelled" };
-
-        let result;
-        try {
-          result = await fetchAuditHistoryForRecord(entitySetName, guid);
-        } catch (err) {
-          const status = err instanceof ApiError ? err.status : undefined;
-          let errorMsg = err.message ?? String(err);
-          if (status === 401) {
-            errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
-          } else if (status === 403) {
-            errorMsg =
-              'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
-          } else if (status === 404) {
-            errorMsg = "Record not found \u2014 it may have been deleted.";
-          }
-          result = { guid, entitySetName, error: errorMsg, status };
-        }
-
-        // C2 fix: wrap formatting in try/catch so one bad record doesn't kill the batch.
-        if (result.error) {
-          allRows.push({
-            RecordID: result.guid,
-            RecordName: nameMap.get(result.guid) ?? "",
-            ChangedBy: "",
-            ChangedDate: "",
-            Operation: "FETCH_ERROR",
-            FieldName: "",
-            OldValue: "",
-            NewValue: result.error,
-          });
-        } else {
-          try {
-            // Collect user GUIDs from this record and batch-fetch any we haven't seen yet.
-            const auditDetails = result.data?.AuditDetailCollection?.AuditDetails ?? [];
-            const newGuids = collectUserGuids(auditDetails);
-            if (newGuids.size > 0) {
-              await fetchUserDisplayNames(newGuids, sharedUserNameMap);
-            }
-
-            const rows = await formatAuditResults(
-              result.guid,
-              entityLogicalName,
-              result.data,
-              nameMap.get(result.guid) ?? "",
-              sharedUserNameMap,
-            );
-            // C3 fix: enforce row cap at the source to prevent tab OOM.
-            if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
-              allRows.push(...rows);
-            } else if (!rowCapHit) {
-              const remaining = MAX_EXPORT_ROWS - allRows.length;
-              if (remaining > 0) allRows.push(...rows.slice(0, remaining));
-              rowCapHit = true;
-            }
-          } catch (fmtErr) {
-            allRows.push({
-              RecordID: result.guid,
-              RecordName: nameMap.get(result.guid) ?? "",
-              ChangedBy: "",
-              ChangedDate: "",
-              Operation: "FORMAT_ERROR",
-              FieldName: "",
-              OldValue: "",
-              NewValue: fmtErr.message ?? String(fmtErr),
-            });
-          }
-        }
-
-        done++;
-        if (portAlive) {
-          try {
-            port.postMessage({ type: "progress", done, total });
-          } catch {
-            /* port closed */
-          }
-        }
-        return result;
+      const { allRows, rowCapHit } = await processAuditRecords({
+        port, portAlive, entitySetName, entityLogicalName,
+        guids, nameMap, sharedUserNameMap,
       });
 
-      await runPool(tasks, MAX_CONCURRENT);
-      if (portAlive)
-        port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
+      if (portAlive()) port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
     } catch (err) {
-      if (portAlive) {
-        try {
-          port.postMessage({
-            type: "error",
-            error: err.message ?? String(err),
-          });
-        } catch {
-          /* port closed */
-        }
+      if (portAlive()) {
+        try { port.postMessage({ type: "error", error: err.message ?? String(err) }); } catch { /* port closed */ }
       }
     }
   });
@@ -1746,8 +1635,9 @@ function handleAuditExportPort(port) {
 // ── User audit export port handler ────────────────────────────────────────────
 
 function handleUserAuditExportPort(port) {
-  let portAlive = true;
-  port.onDisconnect.addListener(() => { portAlive = false; });
+  let alive = true;
+  port.onDisconnect.addListener(() => { alive = false; });
+  const portAlive = () => alive;
 
   port.onMessage.addListener(async function onUserPortMessage(msg) {
     const { entityLogicalName, userGuid, dateFrom, dateTo } = msg ?? {};
@@ -1761,23 +1651,20 @@ function handleUserAuditExportPort(port) {
     }
 
     try {
-      if (portAlive) {
+      if (portAlive()) {
         port.postMessage({ type: "phase", text: "Discovering records touched by user\u2026" });
       }
 
       const recordGuids = await fetchUserAuditRecordGuids(
-        entityLogicalName,
-        userGuid,
-        dateFrom || null,
-        dateTo || null,
+        entityLogicalName, userGuid, dateFrom || null, dateTo || null,
       );
 
       if (recordGuids.length === 0) {
-        if (portAlive) port.postMessage({ type: "done", rows: [] });
+        if (portAlive()) port.postMessage({ type: "done", rows: [] });
         return;
       }
 
-      if (portAlive) {
+      if (portAlive()) {
         port.postMessage({
           type: "phase",
           text: `Found ${recordGuids.length} record${recordGuids.length !== 1 ? "s" : ""}. Fetching audit history\u2026`,
@@ -1788,120 +1675,36 @@ function handleUserAuditExportPort(port) {
       try {
         entitySetName = await resolveEntitySetName(entityLogicalName);
       } catch (err) {
-        if (portAlive) port.postMessage({ type: "error", error: err.message });
+        if (portAlive()) port.postMessage({ type: "error", error: err.message });
         return;
       }
 
       const meta = await fetchEntityMetadata(entityLogicalName);
       const nameMap = await fetchRecordNames(entitySetName, recordGuids, meta.primaryName);
-
-      // Shared user name cache across all records in this export.
       const sharedUserNameMap = new Map();
 
-      const total = recordGuids.length;
-      let done = 0;
-      const allRows = [];
-      let rowCapHit = false;
-
-      const tasks = recordGuids.map((guid) => async () => {
-        if (!portAlive) return;
-
-        let result;
-        try {
-          result = await fetchAuditHistoryForRecord(entitySetName, guid);
-        } catch (err) {
-          const status = err instanceof ApiError ? err.status : undefined;
-          let errorMsg = err.message ?? String(err);
-          if (status === 401) {
-            errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
-          } else if (status === 403) {
-            errorMsg =
-              'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
-          } else if (status === 404) {
-            errorMsg = "Record not found \u2014 it may have been deleted.";
-          }
-          result = { guid, entitySetName, error: errorMsg, status };
+      const dataTransform = (result, data) => {
+        const filtered = { ...data };
+        if (filtered.AuditDetailCollection) {
+          filtered.AuditDetailCollection = {
+            AuditDetails: filterAuditDetailsByUser(
+              filtered.AuditDetailCollection.AuditDetails ?? [],
+              userGuid, dateFrom || null, dateTo || null,
+            ),
+          };
         }
+        return filtered;
+      };
 
-        if (result.error) {
-          allRows.push({
-            RecordID: result.guid,
-            RecordName: nameMap.get(result.guid) ?? "",
-            ChangedBy: "",
-            ChangedDate: "",
-            Operation: "FETCH_ERROR",
-            FieldName: "",
-            OldValue: "",
-            NewValue: result.error,
-          });
-        } else {
-          try {
-            // Filter AuditDetails to only those matching the target user and date range
-            const filteredData = { ...result.data };
-            if (filteredData.AuditDetailCollection) {
-              filteredData.AuditDetailCollection = {
-                AuditDetails: filterAuditDetailsByUser(
-                  filteredData.AuditDetailCollection.AuditDetails ?? [],
-                  userGuid,
-                  dateFrom || null,
-                  dateTo || null,
-                ),
-              };
-            }
-
-            // Collect user GUIDs and batch-fetch any we haven't seen yet.
-            const details = filteredData.AuditDetailCollection?.AuditDetails ?? [];
-            const newGuids = collectUserGuids(details);
-            if (newGuids.size > 0) {
-              await fetchUserDisplayNames(newGuids, sharedUserNameMap);
-            }
-
-            const rows = await formatAuditResults(
-              result.guid,
-              entityLogicalName,
-              filteredData,
-              nameMap.get(result.guid) ?? "",
-              sharedUserNameMap,
-            );
-
-            if (!rowCapHit && allRows.length + rows.length <= MAX_EXPORT_ROWS) {
-              allRows.push(...rows);
-            } else if (!rowCapHit) {
-              const remaining = MAX_EXPORT_ROWS - allRows.length;
-              if (remaining > 0) allRows.push(...rows.slice(0, remaining));
-              rowCapHit = true;
-            }
-          } catch (fmtErr) {
-            allRows.push({
-              RecordID: result.guid,
-              RecordName: nameMap.get(result.guid) ?? "",
-              ChangedBy: "",
-              ChangedDate: "",
-              Operation: "FORMAT_ERROR",
-              FieldName: "",
-              OldValue: "",
-              NewValue: fmtErr.message ?? String(fmtErr),
-            });
-          }
-        }
-
-        done++;
-        if (portAlive) {
-          try {
-            port.postMessage({ type: "progress", done, total });
-          } catch { /* port closed */ }
-        }
+      const { allRows, rowCapHit } = await processAuditRecords({
+        port, portAlive, entitySetName, entityLogicalName,
+        guids: recordGuids, nameMap, sharedUserNameMap, dataTransform,
       });
 
-      await runPool(tasks, MAX_CONCURRENT);
-      if (portAlive) {
-        port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
-      }
+      if (portAlive()) port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
     } catch (err) {
-      if (portAlive) {
-        try {
-          port.postMessage({ type: "error", error: err.message ?? String(err) });
-        } catch { /* port closed */ }
+      if (portAlive()) {
+        try { port.postMessage({ type: "error", error: err.message ?? String(err) }); } catch { /* port closed */ }
       }
     }
   });

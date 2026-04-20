@@ -57,7 +57,7 @@
     }
   ],
 
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "scripting"],
 
   "host_permissions": [
     "*://*.crm.dynamics.com/*",
@@ -89,7 +89,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["src/inject/page-bridge.js"],
+      "resources": ["src/inject/page-bridge.js", "src/inject/fill-data.js"],
       "matches": [
         "*://*.crm.dynamics.com/*",
         "*://*.crm2.dynamics.com/*",

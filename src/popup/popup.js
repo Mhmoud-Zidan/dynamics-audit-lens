@@ -58,14 +58,15 @@ let currentTabId = null;
 let exporting = false;
 let userExporting = false;
 let selectedUser = null;
-let searchTimeout = null;
-let entitySearchTimeout = null;
 
 // ── Version badge ────────────────────────────────────────────────────────────
 
 (function setVersionBadge() {
-  const el = document.getElementById("app-version");
-  if (el) el.textContent = `v${chrome.runtime.getManifest().version}`;
+  const v = `v${chrome.runtime.getManifest().version}`;
+  const header = document.getElementById("app-version");
+  if (header) header.textContent = v;
+  const modal = document.getElementById("modal-version");
+  if (modal) modal.textContent = v;
 })();
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -87,29 +88,27 @@ tabBtns.forEach((btn) => {
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
-function setStatus(text, type = "idle") {
-  statusEl.textContent = text;
-  statusEl.className = `status status--${type}`;
+function makeStatusSetter(el) {
+  return (text, type = "idle") => {
+    el.textContent = text;
+    el.className = `status status--${type}`;
+  };
 }
 
-function setUserStatus(text, type = "idle") {
-  userStatusEl.textContent = text;
-  userStatusEl.className = `status status--${type}`;
+const setStatus = makeStatusSetter(statusEl);
+const setUserStatus = makeStatusSetter(userStatusEl);
+
+function makeProgressUpdater(fillEl, textEl) {
+  return (processed, total) => {
+    const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+    fillEl.style.width = `${pct}%`;
+    textEl.textContent = `Processed ${processed} of ${total} records\u2026`;
+    textEl.className = "progress-text";
+  };
 }
 
-function updateProgress(processed, total) {
-  const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
-  progressFill.style.width = `${pct}%`;
-  progressText.textContent = `Processed ${processed} of ${total} records\u2026`;
-  progressText.className = "progress-text";
-}
-
-function updateUserProgress(processed, total) {
-  const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
-  userProgressFill.style.width = `${pct}%`;
-  userProgressText.textContent = `Processed ${processed} of ${total} records\u2026`;
-  userProgressText.className = "progress-text";
-}
+const updateProgress = makeProgressUpdater(progressFill, progressText);
+const updateUserProgress = makeProgressUpdater(userProgressFill, userProgressText);
 
 function formatDateStamp() {
   const d = new Date();
@@ -318,33 +317,75 @@ async function fetchContext() {
   updateUserExportBtnState();
 }
 
-// ── Entity search ─────────────────────────────────────────────────────────────
+// ── Search wiring ─────────────────────────────────────────────────────────────
 
-entitySearchInput.addEventListener("input", () => {
-  clearTimeout(entitySearchTimeout);
-  const query = entitySearchInput.value.trim();
+function wireSearchInput({ input, dropdown, timeoutRef, searchFn, renderFn, onChange }) {
+  let timeout;
 
-  if (query.length < MIN_SEARCH_LENGTH) {
-    entitySearchDropdown.hidden = true;
-    updateUserExportBtnState();
-    saveUserAuditState();
+  input.addEventListener("input", () => {
+    clearTimeout(timeout);
+    const query = input.value.trim();
+
+    if (query.length < MIN_SEARCH_LENGTH) {
+      dropdown.hidden = true;
+      if (onChange) onChange();
+      return;
+    }
+
+    if (onChange) onChange();
+    timeout = setTimeout(() => searchFn(query), SEARCH_DEBOUNCE_MS);
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => { dropdown.hidden = true; }, 200);
+  });
+
+  input.addEventListener("focus", () => {
+    if (dropdown.children.length > 0 && input.value.trim().length >= MIN_SEARCH_LENGTH) {
+      dropdown.hidden = false;
+    }
+  });
+}
+
+function renderDropdown(dropdown, items, emptyText, onSelect) {
+  dropdown.replaceChildren();
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "search-dropdown__empty";
+    empty.textContent = emptyText;
+    dropdown.appendChild(empty);
+    dropdown.hidden = false;
     return;
   }
 
-  updateUserExportBtnState();
-  saveUserAuditState();
-  entitySearchTimeout = setTimeout(() => performEntitySearch(query), SEARCH_DEBOUNCE_MS);
-});
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = "search-dropdown__item";
 
-entitySearchInput.addEventListener("blur", () => {
-  setTimeout(() => { entitySearchDropdown.hidden = true; }, 200);
-});
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "search-dropdown__item-name";
+    nameSpan.textContent = item.name;
 
-entitySearchInput.addEventListener("focus", () => {
-  if (entitySearchDropdown.children.length > 0 && entitySearchInput.value.trim().length >= MIN_SEARCH_LENGTH) {
-    entitySearchDropdown.hidden = false;
+    const subSpan = document.createElement("span");
+    subSpan.className = "search-dropdown__item-email";
+    subSpan.textContent = item.sub || "";
+
+    el.appendChild(nameSpan);
+    el.appendChild(subSpan);
+
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      onSelect(item.raw);
+    });
+
+    dropdown.appendChild(el);
   }
-});
+
+  dropdown.hidden = false;
+}
+
+// ── Entity search ─────────────────────────────────────────────────────────────
 
 async function performEntitySearch(query) {
   if (!currentTabId) return;
@@ -366,71 +407,32 @@ async function performEntitySearch(query) {
 }
 
 function renderEntityDropdown(entities) {
-  entitySearchDropdown.replaceChildren();
-
-  if (entities.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "search-dropdown__empty";
-    empty.textContent = "No entities found.";
-    entitySearchDropdown.appendChild(empty);
-    entitySearchDropdown.hidden = false;
-    return;
-  }
-
-  for (const ent of entities) {
-    const item = document.createElement("div");
-    item.className = "search-dropdown__item";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "search-dropdown__item-name";
-    nameSpan.textContent = ent.displayName || ent.logicalName;
-
-    const logicalSpan = document.createElement("span");
-    logicalSpan.className = "search-dropdown__item-email";
-    logicalSpan.textContent = ent.displayName !== ent.logicalName
-      ? `(${ent.logicalName})`
-      : "";
-
-    item.appendChild(nameSpan);
-    item.appendChild(logicalSpan);
-
-    item.addEventListener("mousedown", (e) => {
-      e.preventDefault();
+  renderDropdown(
+    entitySearchDropdown,
+    entities.map((ent) => ({
+      name: ent.displayName || ent.logicalName,
+      sub: ent.displayName !== ent.logicalName ? `(${ent.logicalName})` : "",
+      raw: ent,
+    })),
+    "No entities found.",
+    (ent) => {
       entitySearchInput.value = ent.logicalName;
       entitySearchDropdown.hidden = true;
       updateUserExportBtnState();
       saveUserAuditState();
-    });
-
-    entitySearchDropdown.appendChild(item);
-  }
-
-  entitySearchDropdown.hidden = false;
+    },
+  );
 }
 
+wireSearchInput({
+  input: entitySearchInput,
+  dropdown: entitySearchDropdown,
+  searchFn: performEntitySearch,
+  renderFn: renderEntityDropdown,
+  onChange: () => { updateUserExportBtnState(); saveUserAuditState(); },
+});
+
 // ── User search ───────────────────────────────────────────────────────────────
-
-userSearchInput.addEventListener("input", () => {
-  clearTimeout(searchTimeout);
-  const query = userSearchInput.value.trim();
-
-  if (query.length < MIN_SEARCH_LENGTH) {
-    userSearchDropdown.hidden = true;
-    return;
-  }
-
-  searchTimeout = setTimeout(() => performUserSearch(query), SEARCH_DEBOUNCE_MS);
-});
-
-userSearchInput.addEventListener("blur", () => {
-  setTimeout(() => { userSearchDropdown.hidden = true; }, 200);
-});
-
-userSearchInput.addEventListener("focus", () => {
-  if (userSearchDropdown.children.length > 0 && userSearchInput.value.trim().length >= MIN_SEARCH_LENGTH) {
-    userSearchDropdown.hidden = false;
-  }
-});
 
 async function performUserSearch(query) {
   if (!currentTabId) return;
@@ -452,42 +454,24 @@ async function performUserSearch(query) {
 }
 
 function renderUserDropdown(users) {
-  userSearchDropdown.replaceChildren();
-
-  if (users.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "search-dropdown__empty";
-    empty.textContent = "No users found.";
-    userSearchDropdown.appendChild(empty);
-    userSearchDropdown.hidden = false;
-    return;
-  }
-
-  for (const user of users) {
-    const item = document.createElement("div");
-    item.className = "search-dropdown__item";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "search-dropdown__item-name";
-    nameSpan.textContent = user.fullname || "(unnamed)";
-
-    const emailSpan = document.createElement("span");
-    emailSpan.className = "search-dropdown__item-email";
-    emailSpan.textContent = user.email ? `(${user.email})` : "";
-
-    item.appendChild(nameSpan);
-    item.appendChild(emailSpan);
-
-    item.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      selectUser(user);
-    });
-
-    userSearchDropdown.appendChild(item);
-  }
-
-  userSearchDropdown.hidden = false;
+  renderDropdown(
+    userSearchDropdown,
+    users.map((user) => ({
+      name: user.fullname || "(unnamed)",
+      sub: user.email ? `(${user.email})` : "",
+      raw: user,
+    })),
+    "No users found.",
+    (user) => selectUser(user),
+  );
 }
+
+wireSearchInput({
+  input: userSearchInput,
+  dropdown: userSearchDropdown,
+  searchFn: performUserSearch,
+  renderFn: renderUserDropdown,
+});
 
 function selectUser(user) {
   selectedUser = user;
@@ -517,7 +501,7 @@ dateToInput.addEventListener("change", () => saveUserAuditState());
 // ── Export button state ───────────────────────────────────────────────────────
 
 function updateUserExportBtnState() {
-  const entityOk = entitySearchInput.value.trim().length >= 2;
+  const entityOk = entitySearchInput.value.trim().length >= MIN_SEARCH_LENGTH;
   const userOk = !!selectedUser;
   userExportBtn.disabled = !entityOk || !userOk || userExporting;
 }
@@ -673,6 +657,69 @@ async function startUserExport() {
 exportBtn.addEventListener("click", startExport);
 userExportBtn.addEventListener("click", startUserExport);
 
+// ── Fill Data ─────────────────────────────────────────────────────────────────
+
+const fillDataBtn = document.getElementById("fill-data-btn");
+const fillStatusEl = document.getElementById("fill-status");
+
+let fillStatusTimer = null;
+
+function showFillStatus(text, type) {
+  clearTimeout(fillStatusTimer);
+  fillStatusEl.textContent = text;
+  fillStatusEl.className = "fill-status fill-status--" + type;
+  fillStatusEl.hidden = false;
+  if (type === "ok" || type === "err") {
+    fillStatusTimer = setTimeout(() => { fillStatusEl.hidden = true; }, 4000);
+  }
+}
+
+fillDataBtn.addEventListener("click", async () => {
+  if (!currentTabId) return;
+
+  fillDataBtn.disabled = true;
+  showFillStatus("Filling form fields\u2026", "loading");
+
+  try {
+    const response = await sendToTab(currentTabId, { type: "FILL_DATA" });
+
+    if (response?.ok) {
+      const lookupErrs = response.lookupErrors || [];
+      if (response.filled > 0) {
+        let msg =
+          "Filled " + response.filled + " of " + response.total +
+          " fields (" + response.skipped + " skipped).";
+        if (lookupErrs.length > 0) {
+          msg += " Lookup issues: " + lookupErrs.slice(0, 2).join("; ");
+        }
+        showFillStatus(msg, "ok");
+        fillDataBtn.classList.add("fill-data-flash");
+        setTimeout(() => fillDataBtn.classList.remove("fill-data-flash"), 700);
+      } else {
+        let msg =
+          "0 fields filled (" + response.skipped + " skipped). " +
+          "All fields may already have values or be read-only.";
+        if (lookupErrs.length > 0) {
+          msg += " Lookup errors: " + lookupErrs.join("; ");
+        }
+        showFillStatus(msg, "err");
+      }
+      if (lookupErrs.length > 0 || (response.errors || []).length > 0) {
+        console.log("[Audit Lens] Fill debug — formType:", response.formType,
+          "sample:", (response.sample || []).join(", "),
+          "errors:", (response.errors || []).join("; "),
+          "lookupErrors:", lookupErrs.join("; "));
+      }
+    } else {
+      showFillStatus(response?.error || "Failed to fill form data.", "err");
+    }
+  } catch {
+    showFillStatus("Could not reach content script. Reload the page.", "err");
+  }
+
+  fillDataBtn.disabled = false;
+});
+
 // ── Settings / Theme / About ──────────────────────────────────────────────────
 
 const settingsBtn      = document.getElementById("settings-btn");
@@ -698,9 +745,9 @@ function applyTheme(theme) {
 async function loadTheme() {
   try {
     const result = await chrome.storage.local.get(THEME_STORAGE_KEY);
-    applyTheme(result?.[THEME_STORAGE_KEY] ?? "dark");
+    applyTheme(result?.[THEME_STORAGE_KEY] ?? "light");
   } catch {
-    applyTheme("dark");
+    applyTheme("light");
   }
 }
 
@@ -737,6 +784,50 @@ themeToggleBtn.addEventListener("click", () => {
 aboutBtn.addEventListener("click", () => {
   settingsMenu.hidden = true;
   aboutModal.hidden = false;
+});
+
+// ── Audit Settings ─────────────────────────────────────────────────────────────
+
+const auditSettingsBtn = document.getElementById("audit-settings-btn");
+
+async function resolveAppId(tab) {
+  try {
+    const appId = new URL(tab.url).searchParams.get("appid");
+    if (appId) return appId;
+  } catch (_) {}
+
+  try {
+    const resp = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () =>
+        fetch("/api/data/v9.2/appmodules?$select=appmoduleid&$top=1", {
+          headers: { Accept: "application/json" },
+        }).then((r) => r.json()),
+    });
+    const apps = resp?.[0]?.result?.value;
+    if (apps?.length) return apps[0].appmoduleid;
+  } catch (_) {}
+
+  return null;
+}
+
+auditSettingsBtn.addEventListener("click", async () => {
+  settingsMenu.hidden = true;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const origin =
+    tab?.url && DYNAMICS_PATTERN.test(tab.url)
+      ? new URL(tab.url).origin
+      : null;
+
+  if (!origin) {
+    chrome.tabs.create({ url: "https://admin.powerplatform.microsoft.com/" });
+    return;
+  }
+
+  const appId = tab ? await resolveAppId(tab) : null;
+  const encodedData = encodeURIComponent('{"area":"nav_audit"}');
+  const url = `${origin}/main.aspx?appid=${appId}&pagetype=control&controlName=PowerAdmin.EnvironmentSettings.NavigatorPage&data=${encodedData}`;
+  chrome.tabs.create({ url });
 });
 
 aboutCloseBtn.addEventListener("click", () => {

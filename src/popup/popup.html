@@ -3,14 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!--
-      CSP for the popup page. Matches the stricter manifest-level CSP.
-      No 'unsafe-inline' needed — all styles are in popup.css or set via CSSOM.
-    -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none';"
-    />
     <title>Dynamics Audit Lens</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
@@ -24,7 +16,13 @@
           <h1 class="header__title">Dynamics Audit Lens</h1>
           <span id="app-version" class="header__version"></span>
         </div>
-        <div class="settings-container">
+        <div class="header-actions">
+          <button id="fill-data-btn" class="settings-btn" title="Fill form with sample data">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+              <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.24a1 1 0 0 0 0 1.959l1.192.24a1 1 0 0 1 .785.785l.24 1.192a1 1 0 0 0 1.959 0l.24-1.192a1 1 0 0 1 .785-.785l1.192-.24a1 1 0 0 0 0-1.96l-1.192-.24a1 1 0 0 1-.785-.784l-.24-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.683a1 1 0 0 1 .633.633l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.196.587a1 1 0 0 1-.384.384l-.587.196a1 1 0 0 0 0 1.898l.587.196a1 1 0 0 1 .384.384l.196.587a1 1 0 0 0 1.898 0l.196-.587a1 1 0 0 1-.384-.384l-.587-.196a1 1 0 0 1-.384-.384l-.196-.587Z"/>
+            </svg>
+          </button>
+          <div class="settings-container">
           <button id="settings-btn" class="settings-btn" title="Settings">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
@@ -36,10 +34,16 @@
               <span id="theme-label">Light Mode</span>
             </button>
             <div class="settings-menu__sep"></div>
+            <button id="audit-settings-btn" class="settings-menu__item" title="Open Audit Settings">
+              <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+              <span>Audit Settings</span>
+            </button>
+            <div class="settings-menu__sep"></div>
             <button id="about-btn" class="settings-menu__item">
               <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd"/></svg>
               <span>About</span>
             </button>
+          </div>
           </div>
         </div>
       </header>
@@ -48,6 +52,8 @@
         <button class="tab tab--active" data-tab="records">Records</button>
         <button class="tab" data-tab="user">Users</button>
       </nav>
+
+      <div id="fill-status" class="fill-status" hidden></div>
 
       <main class="main">
         <div id="tab-records" class="tab-panel tab-panel--active">
@@ -153,7 +159,7 @@
             <div class="modal__hero-info">
               <div class="modal__hero-name">Dynamics Audit Lens</div>
               <div class="modal__hero-badges">
-                <span class="modal__badge modal__badge--version">v2.0.0</span>
+                <span id="modal-version" class="modal__badge modal__badge--version">v2.0.0</span>
               </div>
             </div>
           </div>
