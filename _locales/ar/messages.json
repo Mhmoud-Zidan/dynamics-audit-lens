@@ -1,0 +1,210 @@
+{
+  "extName": {
+    "message": "عدسة تدقيق Dynamics"
+  },
+  "extDescription": {
+    "message": "أداة تدقيق وفحص محلية فقط لـ Microsoft Dynamics 365 / Dataverse. لا تغادر البيانات متصفحك."
+  },
+  "extShortName": {
+    "message": "عدسة التدقيق"
+  },
+  "fillFormTitle": {
+    "message": "تعبئة النموذج ببيانات تجريبية"
+  },
+  "settingsTitle": {
+    "message": "الإعدادات"
+  },
+  "lightMode": {
+    "message": "الوضع الفاتح"
+  },
+  "darkMode": {
+    "message": "الوضع الداكن"
+  },
+  "auditSettings": {
+    "message": "إعدادات التدقيق"
+  },
+  "about": {
+    "message": "حول"
+  },
+  "tabRecords": {
+    "message": "السجلات"
+  },
+  "tabUsers": {
+    "message": "المستخدمون"
+  },
+  "waitingForDynamics": {
+    "message": "في انتظار صفحة Dynamics\u2026"
+  },
+  "recordsSelected": {
+    "message": "$count$ سجلات محددة",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportToExcel": {
+    "message": "تصدير إلى Excel"
+  },
+  "preparing": {
+    "message": "جارٍ التحضير\u2026"
+  },
+  "entityPlaceholder": {
+    "message": "اسم الكيان (مثال: account, contact\u2026)"
+  },
+  "userSearchPlaceholder": {
+    "message": "بحث عن مستخدم بالاسم أو البريد\u2026"
+  },
+  "remove": {
+    "message": "إزالة"
+  },
+  "from": {
+    "message": "من"
+  },
+  "to": {
+    "message": "إلى"
+  },
+  "exportUserAudit": {
+    "message": "تصدير تدقيق المستخدم"
+  },
+  "allDataLocal": {
+    "message": "جميع البيانات تبقى في متصفحك."
+  },
+  "close": {
+    "message": "إغلاق"
+  },
+  "modalDesc": {
+    "message": "تصدير تدقيق محلي فقط لـ Microsoft Dynamics\u00a0365 و Dataverse. لا تسريب للبيانات \u2014 جميع المعالجة تبقى في متصفحك."
+  },
+  "contact": {
+    "message": "تواصل"
+  },
+  "license": {
+    "message": "الرخصة"
+  },
+  "mitLicense": {
+    "message": "رخصة MIT"
+  },
+  "freeOpenSource": {
+    "message": "مجاني ومفتوح المصدر \u2014 بدون ضمان"
+  },
+  "legal": {
+    "message": "قانوني"
+  },
+  "copyright": {
+    "message": "\u00a9 2026 محمود زيدان \u2014 برنامج مجاني ومفتوح المصدر"
+  },
+  "cannotAccessTab": {
+    "message": "لا يمكن الوصول للتبويب الحالي."
+  },
+  "notDynamicsPage": {
+    "message": "ليست صفحة Dynamics / Dataverse."
+  },
+  "couldNotReadContext": {
+    "message": "تعذرت قراءة سياق الصفحة."
+  },
+  "activeOn": {
+    "message": "نشط على: $hostname$",
+    "placeholders": { "hostname": { "content": "$1" } }
+  },
+  "tooManyRecords": {
+    "message": "عدد السجلات المحددة كبير جداً (الحد الأقصى $max$). قلّل التحديد.",
+    "placeholders": { "max": { "content": "$1" } }
+  },
+  "contentScriptNotReady": {
+    "message": "برنامج المحتوى غير جاهز. أعد تحميل الصفحة."
+  },
+  "noEntitiesFound": {
+    "message": "لم يتم العثور على كيانات."
+  },
+  "unnamed": {
+    "message": "(بدون اسم)"
+  },
+  "noAuditRecords": {
+    "message": "لم يتم العثور على سجلات تدقيق."
+  },
+  "noAuditRecordsForUser": {
+    "message": "لم يتم العثور على سجلات تدقيق لهذا المستخدم."
+  },
+  "cappedAtRows": {
+    "message": "محدود بـ $count$ صف. جارٍ إنشاء الملف\u2026",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportComplete": {
+    "message": "اكتمل التصدير \u2014 $count$ صف.",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportFailed": {
+    "message": "فشل التصدير."
+  },
+  "connectionLost": {
+    "message": "فقد الاتصال. أعد تحميل الصفحة وحاول مجدداً."
+  },
+  "queryingAudit": {
+    "message": "جارٍ الاستعلام عن سجلات التدقيق\u2026"
+  },
+  "fillingFields": {
+    "message": "جارٍ تعبئة حقول النموذج\u2026"
+  },
+  "filledFields": {
+    "message": "تم تعبئة $filled$ من $total$ حقل ($skipped$ تم تخطيه).",
+    "placeholders": {
+      "filled": { "content": "$1" },
+      "total": { "content": "$2" },
+      "skipped": { "content": "$3" }
+    }
+  },
+  "zeroFieldsFilled": {
+    "message": "0 حقل تمت تعبئته ($skipped$ تم تخطيه). قد تكون جميع الحقول ممتلئة أو للقراءة فقط.",
+    "placeholders": { "skipped": { "content": "$1" } }
+  },
+  "failedFill": {
+    "message": "فشلت تعبئة بيانات النموذج."
+  },
+  "couldNotReachContent": {
+    "message": "تعذر الوصول لبرنامج المحتوى. أعد تحميل الصفحة."
+  },
+  "processedOf": {
+    "message": "تمت معالجة $done$ من $total$ سجل\u2026",
+    "placeholders": {
+      "done": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
+  },
+  "lookupIssues": {
+    "message": "مشاكل البحث: $issues$",
+    "placeholders": { "issues": { "content": "$1" } }
+  },
+  "lookupErrors": {
+    "message": "أخطاء البحث: $errors$",
+    "placeholders": { "errors": { "content": "$1" } }
+  },
+  "error": {
+    "message": "خطأ: $msg$",
+    "placeholders": { "msg": { "content": "$1" } }
+  },
+  "discoveringRecords": {
+    "message": "جارٍ اكتشاف السجلات التي لمسها المستخدم\u2026"
+  },
+  "foundRecordsFetching": {
+    "message": "تم العثور على $count$ سجل. جارٍ جلب سجل التدقيق\u2026",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sessionExpired": {
+    "message": "انتهت الجلسة \u2014 أعد تحميل الصفحة وسجّل الدخول مجدداً."
+  },
+  "accessDeniedAudit": {
+    "message": "تم رفض الوصول \u2014 تحتاج صلاحية \"عرض ملخص التدقيق\" (prvReadAuditSummary)."
+  },
+  "recordNotFound": {
+    "message": "السجل غير موجود \u2014 قد يكون قد تم حذفه."
+  },
+  "invalidPayload": {
+    "message": "حمولة غير صالحة."
+  },
+  "opCreate": { "message": "إنشاء" },
+  "opUpdate": { "message": "تحديث" },
+  "opDelete": { "message": "حذف" },
+  "opAccess": { "message": "وصول" },
+  "opUpsert": { "message": "إدراج/تحديث" },
+  "language": { "message": "اللغة" },
+  "langEnglish": { "message": "English" },
+  "langArabic": { "message": "العربية" },
+  "noUsersFound": { "message": "لم يتم العثور على مستخدمين." }
+}

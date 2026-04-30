@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,17 +13,17 @@
       <header class="header">
         <img src="../../icons/icon48.png" alt="" class="header__logo" />
         <div class="header__text">
-          <h1 class="header__title">Dynamics Audit Lens</h1>
+          <h1 class="header__title" data-i18n="extName">Dynamics Audit Lens</h1>
           <span id="app-version" class="header__version"></span>
         </div>
         <div class="header-actions">
-          <button id="fill-data-btn" class="settings-btn" title="Fill form with sample data">
+          <button id="fill-data-btn" class="settings-btn" data-i18n-title="fillFormTitle">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.24a1 1 0 0 0 0 1.959l1.192.24a1 1 0 0 1 .785.785l.24 1.192a1 1 0 0 0 1.959 0l.24-1.192a1 1 0 0 1 .785-.785l1.192-.24a1 1 0 0 0 0-1.96l-1.192-.24a1 1 0 0 1-.785-.784l-.24-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.683a1 1 0 0 1 .633.633l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.196.587a1 1 0 0 1-.384.384l-.587.196a1 1 0 0 0 0 1.898l.587.196a1 1 0 0 1 .384.384l.196.587a1 1 0 0 0 1.898 0l.196-.587a1 1 0 0 1-.384-.384l-.587-.196a1 1 0 0 1-.384-.384l-.196-.587Z"/>
             </svg>
           </button>
           <div class="settings-container">
-          <button id="settings-btn" class="settings-btn" title="Settings">
+          <button id="settings-btn" class="settings-btn" data-i18n-title="settingsTitle">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
             </svg>
@@ -31,17 +31,22 @@
           <div id="settings-menu" class="settings-menu" hidden>
             <button id="theme-toggle-btn" class="settings-menu__item">
               <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 5.404a.75.75 0 1 0-1.06-1.06l-1.061 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM6.464 14.596a.75.75 0 1 0-1.06-1.06l-1.06 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM5 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 5 10ZM14.596 15.657a.75.75 0 0 0 1.06-1.06l-1.06-1.061a.75.75 0 1 0-1.06 1.06l1.06 1.06ZM5.404 6.464a.75.75 0 0 0 1.06-1.06l-1.06-1.06a.75.75 0 0 0-1.06 1.06l1.06 1.06Z"/></svg>
-              <span id="theme-label">Light Mode</span>
+              <span id="theme-label" data-i18n="lightMode">Light Mode</span>
             </button>
             <div class="settings-menu__sep"></div>
-            <button id="audit-settings-btn" class="settings-menu__item" title="Open Audit Settings">
+            <button id="lang-toggle-btn" class="settings-menu__item">
+              <span id="lang-icon-slot"></span>
+              <span id="lang-label" data-i18n="langArabic">العربية</span>
+            </button>
+            <div class="settings-menu__sep"></div>
+            <button id="audit-settings-btn" class="settings-menu__item" data-i18n-title="auditSettings">
               <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
-              <span>Audit Settings</span>
+              <span data-i18n="auditSettings">Audit Settings</span>
             </button>
             <div class="settings-menu__sep"></div>
             <button id="about-btn" class="settings-menu__item">
               <svg class="settings-menu__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd"/></svg>
-              <span>About</span>
+              <span data-i18n="about">About</span>
             </button>
           </div>
           </div>
@@ -49,15 +54,15 @@
       </header>
 
       <nav class="tabs">
-        <button class="tab tab--active" data-tab="records">Records</button>
-        <button class="tab" data-tab="user">Users</button>
+        <button class="tab tab--active" data-tab="records" data-i18n="tabRecords">Records</button>
+        <button class="tab" data-tab="user" data-i18n="tabUsers">Users</button>
       </nav>
 
       <div id="fill-status" class="fill-status" hidden></div>
 
       <main class="main">
         <div id="tab-records" class="tab-panel tab-panel--active">
-          <p id="status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+          <p id="status-msg" class="status status--idle" data-i18n="waitingForDynamics">Waiting for Dynamics page…</p>
 
           <div id="record-info" class="record-info" hidden>
             <span id="record-count" class="record-info__count">0 records selected</span>
@@ -69,25 +74,26 @@
               <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
               <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
             </svg>
-            Export to Excel
+            <span data-i18n="exportToExcel">Export to Excel</span>
           </button>
 
           <div id="progress-section" class="progress-section" hidden>
             <div class="progress-bar">
               <div id="progress-fill" class="progress-bar__fill"></div>
             </div>
-            <p id="progress-text" class="progress-text">Preparing…</p>
+            <p id="progress-text" class="progress-text" data-i18n="preparing">Preparing…</p>
           </div>
         </div>
 
         <div id="tab-user" class="tab-panel" hidden>
-          <p id="user-status-msg" class="status status--idle">Waiting for Dynamics page…</p>
+          <p id="user-status-msg" class="status status--idle" data-i18n="waitingForDynamics">Waiting for Dynamics page…</p>
 
           <div class="search-container">
             <input
               type="text"
               id="entity-search-input"
               class="search-input"
+              data-i18n-placeholder="entityPlaceholder"
               placeholder="Entity name (e.g. account, contact…)"
               autocomplete="off"
               spellcheck="false"
@@ -100,6 +106,7 @@
               type="text"
               id="user-search-input"
               class="search-input"
+              data-i18n-placeholder="userSearchPlaceholder"
               placeholder="Search user by name or email…"
               autocomplete="off"
               spellcheck="false"
@@ -109,16 +116,16 @@
 
           <div id="selected-user" class="selected-user" hidden>
             <span id="selected-user-name" class="selected-user__name"></span>
-            <button id="clear-user-btn" class="selected-user__clear" title="Remove">&times;</button>
+            <button id="clear-user-btn" class="selected-user__clear" data-i18n-title="remove">&times;</button>
           </div>
 
           <div class="date-range">
             <label class="date-field">
-              <span class="date-label">From</span>
+              <span class="date-label" data-i18n="from">From</span>
               <input type="date" id="date-from" class="date-input" />
             </label>
             <label class="date-field">
-              <span class="date-label">To</span>
+              <span class="date-label" data-i18n="to">To</span>
               <input type="date" id="date-to" class="date-input" />
             </label>
           </div>
@@ -128,50 +135,48 @@
               <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
               <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
             </svg>
-            Export User Audit
+            <span data-i18n="exportUserAudit">Export User Audit</span>
           </button>
 
           <div id="user-progress-section" class="progress-section" hidden>
             <div class="progress-bar">
               <div id="user-progress-fill" class="progress-bar__fill"></div>
             </div>
-            <p id="user-progress-text" class="progress-text">Preparing…</p>
+            <p id="user-progress-text" class="progress-text" data-i18n="preparing">Preparing…</p>
           </div>
         </div>
       </main>
 
       <footer class="footer">
-        <span class="footer__note">All data stays in your browser.</span>
+        <span class="footer__note" data-i18n="allDataLocal">All data stays in your browser.</span>
       </footer>
     </div>
 
     <div id="about-modal" class="modal-overlay" hidden>
       <div class="modal">
         <div class="modal__header">
-          <h2 class="modal__title">About</h2>
-          <button id="about-close-btn" class="modal__close" title="Close">&times;</button>
+          <h2 class="modal__title" data-i18n="about">About</h2>
+          <button id="about-close-btn" class="modal__close" data-i18n-title="close">&times;</button>
         </div>
         <div class="modal__body">
 
-          <!-- ── Hero ── -->
           <div class="modal__hero">
             <img src="../../icons/icon48.png" alt="" class="modal__hero-logo" />
             <div class="modal__hero-info">
-              <div class="modal__hero-name">Dynamics Audit Lens</div>
+              <div class="modal__hero-name" data-i18n="extName">Dynamics Audit Lens</div>
               <div class="modal__hero-badges">
                 <span id="modal-version" class="modal__badge modal__badge--version">v2.0.0</span>
               </div>
             </div>
           </div>
 
-          <p class="modal__desc">
+          <p class="modal__desc" data-i18n="modalDesc">
             Local-only audit export for Microsoft Dynamics&nbsp;365 &amp; Dataverse.
             Zero data exfiltration &mdash; all processing stays in your browser.
           </p>
 
-          <!-- ── Contact ── -->
           <div class="modal__section">
-            <span class="modal__section-label">Contact</span>
+            <span class="modal__section-label" data-i18n="contact">Contact</span>
             <div class="modal__contact-list">
 
               <button id="linkedin-btn" class="modal__link-row" aria-label="Open LinkedIn profile">
@@ -207,22 +212,20 @@
             </div>
           </div>
 
-          <!-- ── License ── -->
           <div class="modal__section">
-            <span class="modal__section-label">License</span>
+            <span class="modal__section-label" data-i18n="license">License</span>
             <div class="modal__info-card modal__info-card--license">
               <span class="modal__badge modal__badge--mit">MIT</span>
               <div class="modal__info-text">
-                <span class="modal__info-primary">MIT License</span>
-                <span class="modal__info-secondary">Free &amp; Open Source &mdash; No warranty</span>
+                <span class="modal__info-primary" data-i18n="mitLicense">MIT License</span>
+                <span class="modal__info-secondary" data-i18n="freeOpenSource">Free &amp; Open Source &mdash; No warranty</span>
               </div>
             </div>
           </div>
 
-          <!-- ── Legal ── -->
           <div class="modal__section">
-            <span class="modal__section-label">Legal</span>
-            <p class="modal__legal">
+            <span class="modal__section-label" data-i18n="legal">Legal</span>
+            <p class="modal__legal" data-i18n="legalText">
               THE SOFTWARE IS PROVIDED &ldquo;AS IS&rdquo;, WITHOUT WARRANTY OF ANY KIND,
               EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
               MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -233,14 +236,12 @@
             </p>
           </div>
 
-          <!-- ── Footer ── -->
-          <p class="modal__copyright">&copy; 2026 Mahmoud Zidan &mdash; Free &amp; Open Source Software</p>
+          <p class="modal__copyright" data-i18n="copyright">&copy; 2026 Mahmoud Zidan &mdash; Free &amp; Open Source Software</p>
 
         </div>
       </div>
     </div>
 
-    <!-- Module script — processed by Vite / @crxjs -->
     <script type="module" src="popup.js"></script>
   </body>
 </html>

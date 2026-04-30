@@ -164,6 +164,112 @@
     }
   }
 
+  /**
+   * Detect whether Select All is active on the UCI grid.
+   *
+   * Strategy: if every visible data row has aria-selected="true" the user has
+   * clicked the header checkbox (or "Select All across pages").  In that case
+   * the real selection may span many more pages than are currently rendered in
+   * the DOM (Dynamics uses virtual scrolling / ag-grid).  We flag this so the
+   * content script can query the Dataverse API for the full record set.
+   *
+   * @returns {{ active: boolean, totalRecords: number|null }}
+   */
+  function readGridSelectAllInfo() {
+    try {
+      var allSelectable = document.querySelectorAll(
+        "[aria-selected][data-id], [aria-selected][row-id]"
+      );
+      var selected = document.querySelectorAll(
+        '[aria-selected="true"][data-id], [aria-selected="true"][row-id]'
+      );
+      if (selected.length === 0 || allSelectable.length === 0) {
+        return { active: false, totalRecords: null };
+      }
+      if (selected.length < allSelectable.length) {
+        return { active: false, totalRecords: null };
+      }
+
+      var totalRecords = null;
+
+      // Try to read the total from pagination text (e.g. "1-23 of 90")
+      var spans = document.querySelectorAll("span, div");
+      for (var i = 0; i < spans.length; i++) {
+        var t = (spans[i].textContent ?? "").trim();
+        if (t.length > 80) continue;
+        var m = t.match(/of\s+(\d+)/i);
+        if (m) {
+          var n = parseInt(m[1], 10);
+          if (n > selected.length) { totalRecords = n; break; }
+        }
+      }
+
+      // Fallback: search for "X records/items selected" banner text
+      if (totalRecords === null) {
+        for (var j = 0; j < spans.length; j++) {
+          var t2 = (spans[j].textContent ?? "").trim();
+          if (t2.length > 80) continue;
+          var m2 = t2.match(
+            /(\d+)\s+(?:records?|items?)\s+(?:are\s+)?selected/i
+          );
+          if (m2) {
+            var n2 = parseInt(m2[1], 10);
+            if (n2 > selected.length) { totalRecords = n2; break; }
+          }
+        }
+      }
+
+      return { active: true, totalRecords: totalRecords };
+    } catch {
+      return { active: false, totalRecords: null };
+    }
+  }
+
+  /**
+   * Extract the current view ID and type.
+   *
+   * Primary source: Xrm.Utility.getPageContext().input (most reliable).
+   * Fallback:      URL query-string / hash parameters.
+   *
+   * @returns {{ viewId: string, viewType: string }|null}
+   */
+  function getViewInfo() {
+    try {
+      // --- Try Xrm API first (works even with hash-based routing) ---
+      var input = window.Xrm?.Utility?.getPageContext?.()?.input;
+      if (input?.viewId) {
+        var xrmId = normaliseGuid(String(input.viewId));
+        if (isGuid(xrmId)) {
+          var xrmVt = String(input.viewType ?? "");
+          return {
+            viewId: xrmId,
+            viewType: xrmVt === "4230" ? "userquery" : "savedquery",
+          };
+        }
+      }
+
+      // --- Fallback: parse URL parameters ---
+      var allParams = new URLSearchParams(window.location.search);
+      var hash = window.location.hash;
+      if (hash) {
+        var h = hash.replace(/^#\/?/, "");
+        var hashQuery = h.indexOf("?") !== -1 ? h : "?" + h;
+        var hp = new URLSearchParams(hashQuery);
+        hp.forEach(function (v, k) {
+          if (!allParams.has(k)) allParams.set(k, v);
+        });
+      }
+      var rawId = allParams.get("viewid");
+      if (!rawId) return null;
+      var id = normaliseGuid(rawId);
+      if (!isGuid(id)) return null;
+      var vt = allParams.get("viewtype");
+      return { viewId: id, viewType: vt === "4230" ? "userquery" : "savedquery" };
+    } catch {
+      return null;
+    }
+  }
+
   // ── Main context collector ───────────────────────────────────────────────
 
   function collectContext() {
@@ -191,6 +297,10 @@
     }
 
     let selectedIds = [];
+    let selectAllActive = false;
+    let totalRecordCount = null;
+    let viewId = null;
+    let viewType = null;
 
     if (base.pageType === "entityrecord") {
       // Form — selected "record" is the open record itself, plus any subgrid selections
@@ -200,8 +310,28 @@
         if (!selectedIds.includes(id)) selectedIds.push(id);
       });
     } else if (base.pageType === "entitylist") {
-      // List / grid view — collect ARIA-selected row IDs
       selectedIds = readSelectedGridIds();
+
+      var selectAllInfo = readGridSelectAllInfo();
+      selectAllActive = selectAllInfo.active;
+      totalRecordCount = selectAllInfo.active ? selectAllInfo.totalRecords : null;
+
+      var viewInfo = getViewInfo();
+      if (viewInfo) {
+        viewId = viewInfo.viewId;
+        viewType = viewInfo.viewType;
+      }
+
+      console.log("[Audit Lens] entitylist context:", {
+        selectedIds: selectedIds.length,
+        selectAllActive: selectAllActive,
+        totalRecordCount: totalRecordCount,
+        viewId: viewId,
+        viewType: viewType,
+        allSelectableRows: document.querySelectorAll("[aria-selected][data-id], [aria-selected][row-id]").length,
+        selectedRows: document.querySelectorAll('[aria-selected="true"][data-id], [aria-selected="true"][row-id]').length,
+        xrmInput: window.Xrm?.Utility?.getPageContext?.()?.input,
+      });
     }
 
     // Flag when we're on a list page but couldn't detect any selection method.
@@ -209,6 +339,7 @@
     const selectionUnavailable =
       base.pageType === "entitylist" &&
       selectedIds.length === 0 &&
+      !selectAllActive &&
       document.querySelectorAll('[aria-selected="true"]').length > 0;
 
     return {
@@ -218,6 +349,10 @@
       entityId: base.entityId,
       selectedIds,
       selectionUnavailable,
+      selectAllActive,
+      totalRecordCount,
+      viewId,
+      viewType,
     };
   }
 

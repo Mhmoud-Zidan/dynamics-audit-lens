@@ -1,0 +1,210 @@
+{
+  "extName": {
+    "message": "Dynamics Audit Lens"
+  },
+  "extDescription": {
+    "message": "Local-only audit and inspection tool for Microsoft Dynamics 365 / Dataverse. No data leaves your browser."
+  },
+  "extShortName": {
+    "message": "Audit Lens"
+  },
+  "fillFormTitle": {
+    "message": "Fill form with sample data"
+  },
+  "settingsTitle": {
+    "message": "Settings"
+  },
+  "lightMode": {
+    "message": "Light Mode"
+  },
+  "darkMode": {
+    "message": "Dark Mode"
+  },
+  "auditSettings": {
+    "message": "Audit Settings"
+  },
+  "about": {
+    "message": "About"
+  },
+  "tabRecords": {
+    "message": "Records"
+  },
+  "tabUsers": {
+    "message": "Users"
+  },
+  "waitingForDynamics": {
+    "message": "Waiting for Dynamics page\u2026"
+  },
+  "recordsSelected": {
+    "message": "$count$ record(s) selected",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportToExcel": {
+    "message": "Export to Excel"
+  },
+  "preparing": {
+    "message": "Preparing\u2026"
+  },
+  "entityPlaceholder": {
+    "message": "Entity name (e.g. account, contact\u2026)"
+  },
+  "userSearchPlaceholder": {
+    "message": "Search user by name or email\u2026"
+  },
+  "remove": {
+    "message": "Remove"
+  },
+  "from": {
+    "message": "From"
+  },
+  "to": {
+    "message": "To"
+  },
+  "exportUserAudit": {
+    "message": "Export User Audit"
+  },
+  "allDataLocal": {
+    "message": "All data stays in your browser."
+  },
+  "close": {
+    "message": "Close"
+  },
+  "modalDesc": {
+    "message": "Local-only audit export for Microsoft Dynamics\u00a0365 & Dataverse. Zero data exfiltration \u2014 all processing stays in your browser."
+  },
+  "contact": {
+    "message": "Contact"
+  },
+  "license": {
+    "message": "License"
+  },
+  "mitLicense": {
+    "message": "MIT License"
+  },
+  "freeOpenSource": {
+    "message": "Free & Open Source \u2014 No warranty"
+  },
+  "legal": {
+    "message": "Legal"
+  },
+  "copyright": {
+    "message": "\u00a9 2026 Mahmoud Zidan \u2014 Free & Open Source Software"
+  },
+  "cannotAccessTab": {
+    "message": "Cannot access current tab."
+  },
+  "notDynamicsPage": {
+    "message": "Not a Dynamics / Dataverse page."
+  },
+  "couldNotReadContext": {
+    "message": "Could not read page context."
+  },
+  "activeOn": {
+    "message": "Active on: $hostname$",
+    "placeholders": { "hostname": { "content": "$1" } }
+  },
+  "tooManyRecords": {
+    "message": "Too many records selected (max $max$). Narrow your selection.",
+    "placeholders": { "max": { "content": "$1" } }
+  },
+  "contentScriptNotReady": {
+    "message": "Content script not ready. Reload the page."
+  },
+  "noEntitiesFound": {
+    "message": "No entities found."
+  },
+  "unnamed": {
+    "message": "(unnamed)"
+  },
+  "noAuditRecords": {
+    "message": "No audit records found."
+  },
+  "noAuditRecordsForUser": {
+    "message": "No audit records found for this user."
+  },
+  "cappedAtRows": {
+    "message": "Capped at $count$ rows. Generating file\u2026",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportComplete": {
+    "message": "Export complete \u2014 $count$ row(s).",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "exportFailed": {
+    "message": "Export failed."
+  },
+  "connectionLost": {
+    "message": "Connection lost. Reload the page and retry."
+  },
+  "queryingAudit": {
+    "message": "Querying audit records\u2026"
+  },
+  "fillingFields": {
+    "message": "Filling form fields\u2026"
+  },
+  "filledFields": {
+    "message": "Filled $filled$ of $total$ fields ($skipped$ skipped).",
+    "placeholders": {
+      "filled": { "content": "$1" },
+      "total": { "content": "$2" },
+      "skipped": { "content": "$3" }
+    }
+  },
+  "zeroFieldsFilled": {
+    "message": "0 fields filled ($skipped$ skipped). All fields may already have values or be read-only.",
+    "placeholders": { "skipped": { "content": "$1" } }
+  },
+  "failedFill": {
+    "message": "Failed to fill form data."
+  },
+  "couldNotReachContent": {
+    "message": "Could not reach content script. Reload the page."
+  },
+  "processedOf": {
+    "message": "Processed $done$ of $total$ records\u2026",
+    "placeholders": {
+      "done": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
+  },
+  "lookupIssues": {
+    "message": "Lookup issues: $issues$",
+    "placeholders": { "issues": { "content": "$1" } }
+  },
+  "lookupErrors": {
+    "message": "Lookup errors: $errors$",
+    "placeholders": { "errors": { "content": "$1" } }
+  },
+  "error": {
+    "message": "Error: $msg$",
+    "placeholders": { "msg": { "content": "$1" } }
+  },
+  "discoveringRecords": {
+    "message": "Discovering records touched by user\u2026"
+  },
+  "foundRecordsFetching": {
+    "message": "Found $count$ record(s). Fetching audit history\u2026",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sessionExpired": {
+    "message": "Session expired \u2014 please reload the page and re-authenticate."
+  },
+  "accessDeniedAudit": {
+    "message": "Access denied \u2014 you need the \"Audit Summary View\" (prvReadAuditSummary) privilege."
+  },
+  "recordNotFound": {
+    "message": "Record not found \u2014 it may have been deleted."
+  },
+  "invalidPayload": {
+    "message": "Invalid payload."
+  },
+  "opCreate": { "message": "Create" },
+  "opUpdate": { "message": "Update" },
+  "opDelete": { "message": "Delete" },
+  "opAccess": { "message": "Access" },
+  "opUpsert": { "message": "Upsert" },
+  "language": { "message": "Language" },
+  "langEnglish": { "message": "English" },
+  "langArabic": { "message": "العربية" },
+  "noUsersFound": { "message": "No users found." }
+}

@@ -796,6 +796,79 @@ async function fetchRecordNames(entitySetName, guids, primaryNameAttr) {
 
 // ── AttributeMask decoder ─────────────────────────────────────────────────────
 
+// ── View record ID resolver (Select All across pages) ─────────────────────────
+
+/**
+ * Resolve all record GUIDs for a given view by fetching the view's FetchXML
+ * from the Dataverse API and executing it (limited to MAX_EXPORT_RECORDS).
+ *
+ * When the user clicks "Select All across pages" on a Dynamics 365 grid the
+ * DOM only contains the visible page (~20 rows).  This function queries the
+ * underlying view so the extension can operate on the full record set.
+ *
+ * @param {string} entityLogicalName  e.g. "account"
+ * @param {string} viewId             GUID of the savedquery or userquery
+ * @param {string} viewType           "savedquery" or "userquery"
+ * @returns {Promise<string[]>}       Array of lowercase GUID strings
+ */
+async function resolveViewRecordIds(entityLogicalName, viewId, viewType) {
+  assertEntityLogicalName(entityLogicalName);
+  assertGuid(viewId);
+
+  const apiBase = `${getOrgUri()}/api/data/v${API_VERSION}`;
+  const endpoint = viewType === "userquery" ? "userqueries" : "savedqueries";
+
+  const resp = await fetchWithRetry(() =>
+    fetch(`${apiBase}/${endpoint}(${viewId})?$select=fetchxml`, {
+      method: "GET",
+      credentials: "include",
+      headers: ODATA_HEADERS,
+    }),
+  );
+  const json = await resp.json();
+  const fetchXml = json.fetchxml;
+  if (!fetchXml) return [];
+
+  const meta = await fetchEntityMetadata(entityLogicalName);
+  if (!meta.entitySetName) return [];
+
+  let limitedXml = fetchXml.replace(
+    /<fetch([^>]*)>/i,
+    (match, attrs) => {
+      let clean = attrs
+        .replace(/\bpage="[^"]*"/i, "")
+        .replace(/\bcount="[^"]*"/i, "")
+        .replace(/\bpaging-cookie="[^"]*"/i, "");
+      return `<fetch${clean} page="1" count="${MAX_EXPORT_RECORDS}">`;
+    },
+  );
+
+  const url =
+    `${apiBase}/${meta.entitySetName}?fetchXml=` +
+    encodeURIComponent(limitedXml);
+
+  const resultResp = await fetchWithRetry(() =>
+    fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: ODATA_HEADERS,
+    }),
+  );
+  const resultJson = await resultResp.json();
+
+  const allIds = [];
+  for (const r of resultJson.value ?? []) {
+    const id = r[meta.primaryId];
+    if (typeof id === "string" && GUID_PATTERN.test(id)) {
+      allIds.push(id.toLowerCase());
+    }
+  }
+
+  return allIds;
+}
+
+// ── AttributeMask decoder (continued) ────────────────────────────────────────
+
 /**
  * Decode the `attributemask` field from an AuditRecord into an array of
  * attribute logical names.
@@ -839,12 +912,32 @@ const FORMATTED_SUFFIX = "@OData.Community.Display.V1.FormattedValue";
  * Dataverse Audit entity OperationType option set values → human-readable labels.
  * Used as a fallback when the server does not return formatted annotations.
  */
+const CONTENT_I18N = {
+  en: { opCreate: "Create", opUpdate: "Update", opDelete: "Delete", opAccess: "Access", opUpsert: "Upsert", sessionExpired: "Session expired \u2014 please reload the page and re-authenticate.", accessDeniedAudit: "Access denied \u2014 you need the \"Audit Summary View\" (prvReadAuditSummary) privilege.", recordNotFound: "Record not found \u2014 it may have been deleted.", invalidPayload: "Invalid payload.", discoveringRecords: "Discovering records touched by user\u2026", foundRecordsFetching: "Found $count$ record(s). Fetching audit history\u2026" },
+  ar: { opCreate: "\u0625\u0646\u0634\u0627\u0621", opUpdate: "\u062a\u062d\u062f\u064a\u062b", opDelete: "\u062d\u0630\u0641", opAccess: "\u0648\u0635\u0648\u0644", opUpsert: "\u0625\u062f\u0631\u0627\u062c/\u062a\u062d\u062f\u064a\u062b", sessionExpired: "\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629 \u2014 \u0623\u0639\u062f \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0635\u0641\u062d\u0629 \u0648\u0633\u062c\u0651\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0645\u062c\u062f\u062f\u0627\u064b.", accessDeniedAudit: "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0648\u0635\u0648\u0644 \u2014 \u062a\u062d\u062a\u0627\u062c \u0635\u0644\u0627\u062d\u064a\u0629 \"\u0639\u0631\u0636 \u0645\u0644\u062e\u0635 \u0627\u0644\u062a\u062f\u0642\u064a\u0642\" (prvReadAuditSummary).", recordNotFound: "\u0627\u0644\u0633\u062c\u0644 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u2014 \u0642\u062f \u064a\u0643\u0648\u0646 \u0642\u062f \u062a\u0645 \u062d\u0630\u0641\u0647.", invalidPayload: "\u062d\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629.", discoveringRecords: "\u062c\u0627\u0631\u0656 \u0627\u0643\u062a\u0634\u0627\u0641 \u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062a\u064a \u0644\u0645\u0633\u0647\u0627 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u2026", foundRecordsFetching: "\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 $count$ \u0633\u062c\u0644. \u062c\u0627\u0631\u0656 \u062c\u0644\u0628 \u0633\u062c\u0644 \u0627\u0644\u062a\u062f\u0642\u064a\u0642\u2026" },
+};
+
+async function getContentLang() {
+  try {
+    const result = await chrome.storage.local.get("lang");
+    return result?.lang || "en";
+  } catch { return "en"; }
+}
+
+function ct(key) {
+  const lang = ct._lang || "en";
+  return CONTENT_I18N[lang]?.[key] || CONTENT_I18N.en[key] || key;
+}
+ct._lang = "en";
+
+getContentLang().then((l) => { ct._lang = l; });
+
 const OPERATION_MAP = new Map([
-  [1, "Create"],
-  [2, "Update"],
-  [3, "Delete"],
-  [4, "Access"],
-  [5, "Upsert"],
+  [1, ct("opCreate")],
+  [2, ct("opUpdate")],
+  [3, ct("opDelete")],
+  [4, ct("opAccess")],
+  [5, ct("opUpsert")],
 ]);
 
 /**
@@ -1414,7 +1507,39 @@ chrome.runtime.onMessage.addListener(
     if (sender.id !== chrome.runtime.id) return false;
     if (message.type === "GET_CONTEXT") {
       requestFreshContext()
-        .then((context) => sendResponse({ ok: true, context }))
+        .then(async (context) => {
+          console.log("[Audit Lens] GET_CONTEXT bridge result:", {
+            selectAllActive: context.selectAllActive,
+            entityName: context.entityName,
+            viewId: context.viewId,
+            selectedIdsCount: context.selectedIds?.length,
+            totalRecordCount: context.totalRecordCount,
+          });
+          if (
+            context.selectAllActive &&
+            context.entityName &&
+            context.viewId
+          ) {
+            try {
+              const allIds = await resolveViewRecordIds(
+                context.entityName,
+                context.viewId,
+                context.viewType,
+              );
+              console.log("[Audit Lens] resolveViewRecordIds returned:", allIds.length);
+              if (allIds.length > context.selectedIds?.length) {
+                context.selectedIds = allIds;
+                context.totalRecordCount = allIds.length;
+              }
+            } catch (e) {
+              console.warn(
+                "[Audit Lens] Failed to resolve view record IDs:",
+                e,
+              );
+            }
+          }
+          sendResponse({ ok: true, context });
+        })
         .catch(() =>
           sendResponse({ ok: false, context: cachedContext, error: "timeout" }),
         );
@@ -1527,12 +1652,11 @@ function classifyFetchError(err) {
   const status = err instanceof ApiError ? err.status : undefined;
   let errorMsg = err.message ?? String(err);
   if (status === 401) {
-    errorMsg = "Session expired \u2014 please reload the page and re-authenticate.";
+    errorMsg = ct("sessionExpired");
   } else if (status === 403) {
-    errorMsg =
-      'Access denied \u2014 you need the "Audit Summary View" (prvReadAuditSummary) privilege.';
+    errorMsg = ct("accessDeniedAudit");
   } else if (status === 404) {
-    errorMsg = "Record not found \u2014 it may have been deleted.";
+    errorMsg = ct("recordNotFound");
   }
   return { errorMsg, status };
 }
@@ -1601,7 +1725,7 @@ function handleAuditExportPort(port) {
       !Array.isArray(guids) ||
       guids.length === 0
     ) {
-      port.postMessage({ type: "error", error: "Invalid payload." });
+      port.postMessage({ type: "error", error: ct("invalidPayload") });
       return;
     }
 
@@ -1646,13 +1770,13 @@ function handleUserAuditExportPort(port) {
       typeof userGuid !== "string" ||
       !GUID_PATTERN.test(userGuid)
     ) {
-      port.postMessage({ type: "error", error: "Invalid payload." });
+      port.postMessage({ type: "error", error: ct("invalidPayload") });
       return;
     }
 
     try {
       if (portAlive()) {
-        port.postMessage({ type: "phase", text: "Discovering records touched by user\u2026" });
+        port.postMessage({ type: "phase", text: ct("discoveringRecords") });
       }
 
       const recordGuids = await fetchUserAuditRecordGuids(
@@ -1667,7 +1791,7 @@ function handleUserAuditExportPort(port) {
       if (portAlive()) {
         port.postMessage({
           type: "phase",
-          text: `Found ${recordGuids.length} record${recordGuids.length !== 1 ? "s" : ""}. Fetching audit history\u2026`,
+          text: ct("foundRecordsFetching").replace(/\$\w+\$/, String(recordGuids.length)),
         });
       }
 
