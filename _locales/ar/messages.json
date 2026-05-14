@@ -3,7 +3,7 @@
     "message": "عدسة تدقيق Dynamics"
   },
   "extDescription": {
-    "message": "أداة تدقيق وفحص محلية فقط لـ Microsoft Dynamics 365 / Dataverse. لا تغادر البيانات متصفحك."
+    "message": "أداة محلية بالكامل لتدقيق وفحص سجلات Microsoft Dynamics 365 / Dataverse. لا تغادر البيانات متصفحك."
   },
   "extShortName": {
     "message": "عدسة التدقيق"
@@ -24,7 +24,7 @@
     "message": "إعدادات التدقيق"
   },
   "about": {
-    "message": "حول"
+    "message": "حول البرنامج"
   },
   "tabRecords": {
     "message": "السجلات"
@@ -33,23 +33,36 @@
     "message": "المستخدمون"
   },
   "waitingForDynamics": {
-    "message": "في انتظار صفحة Dynamics\u2026"
+    "message": "بانتظار صفحة Dynamics…"
   },
   "recordsSelected": {
-    "message": "$count$ سجلات محددة",
+    "message": "تم تحديد $count$ سجل",
     "placeholders": { "count": { "content": "$1" } }
   },
   "exportToExcel": {
     "message": "تصدير إلى Excel"
   },
+  "exportEntireView": {
+    "message": "تصدير جميع سجلات العرض"
+  },
+  "exportEntireViewWithCount": {
+    "message": "تصدير جميع سجلات العرض ($count$)",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "resolvingViewRecords": {
+    "message": "جارٍ جلب سجلات العرض من Dataverse…"
+  },
+  "viewResolveFailed": {
+    "message": "تعذّر جلب سجلات هذا العرض."
+  },
   "preparing": {
-    "message": "جارٍ التحضير\u2026"
+    "message": "جارٍ التحضير…"
   },
   "entityPlaceholder": {
-    "message": "اسم الكيان (مثال: account, contact\u2026)"
+    "message": "اسم الكيان (مثال: account, contact…)"
   },
   "userSearchPlaceholder": {
-    "message": "بحث عن مستخدم بالاسم أو البريد\u2026"
+    "message": "ابحث عن مستخدم بالاسم أو البريد الإلكتروني…"
   },
   "remove": {
     "message": "إزالة"
@@ -61,89 +74,89 @@
     "message": "إلى"
   },
   "exportUserAudit": {
-    "message": "تصدير تدقيق المستخدم"
+    "message": "تصدير تدقيق نشاط المستخدم"
   },
   "allDataLocal": {
-    "message": "جميع البيانات تبقى في متصفحك."
+    "message": "تبقى جميع البيانات داخل متصفحك."
   },
   "close": {
     "message": "إغلاق"
   },
   "modalDesc": {
-    "message": "تصدير تدقيق محلي فقط لـ Microsoft Dynamics\u00a0365 و Dataverse. لا تسريب للبيانات \u2014 جميع المعالجة تبقى في متصفحك."
+    "message": "أداة محلية بالكامل لتصدير سجلات التدقيق من Microsoft Dynamics 365 و Dataverse. لا يتم إرسال أي بيانات إلى أي خادم خارجي — جميع المعالجة تتم داخل متصفحك."
   },
   "contact": {
     "message": "تواصل"
   },
   "license": {
-    "message": "الرخصة"
+    "message": "الترخيص"
   },
   "mitLicense": {
     "message": "رخصة MIT"
   },
   "freeOpenSource": {
-    "message": "مجاني ومفتوح المصدر \u2014 بدون ضمان"
+    "message": "مجاني ومفتوح المصدر — دون أي ضمان"
   },
   "legal": {
-    "message": "قانوني"
+    "message": "إشعار قانوني"
   },
   "copyright": {
-    "message": "\u00a9 2026 محمود زيدان \u2014 برنامج مجاني ومفتوح المصدر"
+    "message": "© 2026 محمود زيدان — برنامج مجاني ومفتوح المصدر"
   },
   "cannotAccessTab": {
-    "message": "لا يمكن الوصول للتبويب الحالي."
+    "message": "تعذّر الوصول إلى علامة التبويب الحالية."
   },
   "notDynamicsPage": {
-    "message": "ليست صفحة Dynamics / Dataverse."
+    "message": "هذه الصفحة ليست صفحة Dynamics / Dataverse."
   },
   "couldNotReadContext": {
-    "message": "تعذرت قراءة سياق الصفحة."
+    "message": "تعذّرت قراءة سياق الصفحة."
   },
   "activeOn": {
     "message": "نشط على: $hostname$",
     "placeholders": { "hostname": { "content": "$1" } }
   },
   "tooManyRecords": {
-    "message": "عدد السجلات المحددة كبير جداً (الحد الأقصى $max$). قلّل التحديد.",
+    "message": "عدد السجلات المحددة كبير جداً (الحد الأقصى $max$ سجل). يرجى تقليص نطاق التحديد.",
     "placeholders": { "max": { "content": "$1" } }
   },
   "contentScriptNotReady": {
-    "message": "برنامج المحتوى غير جاهز. أعد تحميل الصفحة."
+    "message": "الإضافة لم تكتمل تهيئتها بعد. يرجى إعادة تحميل الصفحة."
   },
   "noEntitiesFound": {
-    "message": "لم يتم العثور على كيانات."
+    "message": "لا توجد كيانات مطابقة."
   },
   "unnamed": {
     "message": "(بدون اسم)"
   },
   "noAuditRecords": {
-    "message": "لم يتم العثور على سجلات تدقيق."
+    "message": "لا توجد سجلات تدقيق لهذه العناصر."
   },
   "noAuditRecordsForUser": {
-    "message": "لم يتم العثور على سجلات تدقيق لهذا المستخدم."
+    "message": "لا توجد سجلات تدقيق لهذا المستخدم."
   },
   "cappedAtRows": {
-    "message": "محدود بـ $count$ صف. جارٍ إنشاء الملف\u2026",
+    "message": "تم اقتطاع النتائج عند $count$ صف. جارٍ إنشاء الملف…",
     "placeholders": { "count": { "content": "$1" } }
   },
   "exportComplete": {
-    "message": "اكتمل التصدير \u2014 $count$ صف.",
+    "message": "اكتمل التصدير — $count$ صف.",
     "placeholders": { "count": { "content": "$1" } }
   },
   "exportFailed": {
     "message": "فشل التصدير."
   },
   "connectionLost": {
-    "message": "فقد الاتصال. أعد تحميل الصفحة وحاول مجدداً."
+    "message": "انقطع الاتصال. يرجى إعادة تحميل الصفحة والمحاولة مجدداً."
   },
   "queryingAudit": {
-    "message": "جارٍ الاستعلام عن سجلات التدقيق\u2026"
+    "message": "جارٍ الاستعلام عن سجلات التدقيق…"
   },
   "fillingFields": {
-    "message": "جارٍ تعبئة حقول النموذج\u2026"
+    "message": "جارٍ تعبئة حقول النموذج…"
   },
   "filledFields": {
-    "message": "تم تعبئة $filled$ من $total$ حقل ($skipped$ تم تخطيه).",
+    "message": "تمت تعبئة $filled$ من أصل $total$ حقل (تم تخطي $skipped$).",
     "placeholders": {
       "filled": { "content": "$1" },
       "total": { "content": "$2" },
@@ -151,28 +164,28 @@
     }
   },
   "zeroFieldsFilled": {
-    "message": "0 حقل تمت تعبئته ($skipped$ تم تخطيه). قد تكون جميع الحقول ممتلئة أو للقراءة فقط.",
+    "message": "لم تتم تعبئة أي حقل (تم تخطي $skipped$). قد تكون جميع الحقول ممتلئة بالفعل أو للقراءة فقط.",
     "placeholders": { "skipped": { "content": "$1" } }
   },
   "failedFill": {
-    "message": "فشلت تعبئة بيانات النموذج."
+    "message": "تعذّرت تعبئة بيانات النموذج."
   },
   "couldNotReachContent": {
-    "message": "تعذر الوصول لبرنامج المحتوى. أعد تحميل الصفحة."
+    "message": "تعذّر الوصول إلى الإضافة. يرجى إعادة تحميل الصفحة."
   },
   "processedOf": {
-    "message": "تمت معالجة $done$ من $total$ سجل\u2026",
+    "message": "تمت معالجة $done$ من أصل $total$ سجل…",
     "placeholders": {
       "done": { "content": "$1" },
       "total": { "content": "$2" }
     }
   },
   "lookupIssues": {
-    "message": "مشاكل البحث: $issues$",
+    "message": "تنبيهات في حقول البحث (Lookup): $issues$",
     "placeholders": { "issues": { "content": "$1" } }
   },
   "lookupErrors": {
-    "message": "أخطاء البحث: $errors$",
+    "message": "أخطاء في حقول البحث (Lookup): $errors$",
     "placeholders": { "errors": { "content": "$1" } }
   },
   "error": {
@@ -180,23 +193,23 @@
     "placeholders": { "msg": { "content": "$1" } }
   },
   "discoveringRecords": {
-    "message": "جارٍ اكتشاف السجلات التي لمسها المستخدم\u2026"
+    "message": "جارٍ البحث عن السجلات التي عدّلها هذا المستخدم…"
   },
   "foundRecordsFetching": {
-    "message": "تم العثور على $count$ سجل. جارٍ جلب سجل التدقيق\u2026",
+    "message": "تم العثور على $count$ سجل. جارٍ جلب سجلات التدقيق…",
     "placeholders": { "count": { "content": "$1" } }
   },
   "sessionExpired": {
-    "message": "انتهت الجلسة \u2014 أعد تحميل الصفحة وسجّل الدخول مجدداً."
+    "message": "انتهت صلاحية الجلسة — يرجى إعادة تحميل الصفحة وتسجيل الدخول مجدداً."
   },
   "accessDeniedAudit": {
-    "message": "تم رفض الوصول \u2014 تحتاج صلاحية \"عرض ملخص التدقيق\" (prvReadAuditSummary)."
+    "message": "تم رفض الوصول — تحتاج إلى صلاحية \"عرض ملخص التدقيق\" (prvReadAuditSummary)."
   },
   "recordNotFound": {
-    "message": "السجل غير موجود \u2014 قد يكون قد تم حذفه."
+    "message": "السجل غير موجود — ربما تم حذفه."
   },
   "invalidPayload": {
-    "message": "حمولة غير صالحة."
+    "message": "البيانات المُرسَلة غير صالحة."
   },
   "opCreate": { "message": "إنشاء" },
   "opUpdate": { "message": "تحديث" },

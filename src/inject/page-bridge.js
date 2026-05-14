@@ -167,56 +167,142 @@
   /**
    * Detect whether Select All is active on the UCI grid.
    *
-   * Strategy: if every visible data row has aria-selected="true" the user has
-   * clicked the header checkbox (or "Select All across pages").  In that case
-   * the real selection may span many more pages than are currently rendered in
-   * the DOM (Dynamics uses virtual scrolling / ag-grid).  We flag this so the
-   * content script can query the Dataverse API for the full record set.
+   * Why this is tricky: Dynamics' ag-grid virtualises rows — only the rows
+   * inside the viewport (~25-30) exist in the DOM at any time. Comparing the
+   * count of aria-selected="true" rows against the count of rendered rows is
+   * unreliable because rows can be in transient render states (and the user
+   * scrolling does not re-mark off-screen rows). We therefore detect via
+   * multiple independent heuristics and treat ANY of them as proof of
+   * Select-All:
+   *
+   *   1. The header column's checkbox is checked (most authoritative).
+   *   2. A page banner explicitly says "N records selected" or
+   *      "N of M selected" with N > number of currently-selected DOM rows.
+   *   3. All rendered data rows are aria-selected="true" (the original signal).
+   *
+   * When active, we also try to read the total record count from pagination
+   * text ("1-23 of 90") or selected-items banner text so the popup can show
+   * the right number even before the API fallback resolves the full GUID set.
    *
    * @returns {{ active: boolean, totalRecords: number|null }}
    */
   function readGridSelectAllInfo() {
     try {
-      var allSelectable = document.querySelectorAll(
-        "[aria-selected][data-id], [aria-selected][row-id]"
-      );
       var selected = document.querySelectorAll(
         '[aria-selected="true"][data-id], [aria-selected="true"][row-id]'
       );
-      if (selected.length === 0 || allSelectable.length === 0) {
-        return { active: false, totalRecords: null };
-      }
-      if (selected.length < allSelectable.length) {
-        return { active: false, totalRecords: null };
-      }
+      var allSelectable = document.querySelectorAll(
+        "[aria-selected][data-id], [aria-selected][row-id]"
+      );
 
-      var totalRecords = null;
-
-      // Try to read the total from pagination text (e.g. "1-23 of 90")
-      var spans = document.querySelectorAll("span, div");
-      for (var i = 0; i < spans.length; i++) {
-        var t = (spans[i].textContent ?? "").trim();
-        if (t.length > 80) continue;
-        var m = t.match(/of\s+(\d+)/i);
-        if (m) {
-          var n = parseInt(m[1], 10);
-          if (n > selected.length) { totalRecords = n; break; }
-        }
-      }
-
-      // Fallback: search for "X records/items selected" banner text
-      if (totalRecords === null) {
-        for (var j = 0; j < spans.length; j++) {
-          var t2 = (spans[j].textContent ?? "").trim();
-          if (t2.length > 80) continue;
-          var m2 = t2.match(
-            /(\d+)\s+(?:records?|items?)\s+(?:are\s+)?selected/i
+      // ── Heuristic 1: header checkbox is checked ──────────────────────────
+      // The grid header has a checkbox the user clicks to select-all.
+      // Match by role+aria-checked, by aria-label, and by the legacy
+      // data-id="header" row containing a checked checkbox.
+      var headerChecked = false;
+      try {
+        var checkBoxes = document.querySelectorAll(
+          '[role="checkbox"][aria-checked="true"]'
+        );
+        for (var c = 0; c < checkBoxes.length; c++) {
+          var cb = checkBoxes[c];
+          var label = (cb.getAttribute("aria-label") || "").toLowerCase();
+          if (
+            label.indexOf("select all") !== -1 ||
+            label.indexOf("all rows") !== -1 ||
+            label.indexOf("toggle selection of all") !== -1
+          ) {
+            headerChecked = true;
+            break;
+          }
+          // Also: a checked checkbox sitting inside the header row.
+          var hostRow = cb.closest(
+            '[role="row"][data-id="header"], [role="row"][aria-rowindex="1"], [role="columnheader"]'
           );
-          if (m2) {
-            var n2 = parseInt(m2[1], 10);
-            if (n2 > selected.length) { totalRecords = n2; break; }
+          if (hostRow) {
+            headerChecked = true;
+            break;
           }
         }
+        if (!headerChecked) {
+          var input = document.querySelector(
+            'input[type="checkbox"][aria-label*="elect all" i]:checked'
+          );
+          if (input) headerChecked = true;
+        }
+      } catch {
+        // ignore — fall through to other heuristics
+      }
+
+      // ── Heuristic 2: "N records selected" / "N of M selected" banner ─────
+      var bannerTotal = null;
+      var bannerSelectedCount = null;
+      var spans = document.querySelectorAll("span, div");
+      for (var s = 0; s < spans.length; s++) {
+        var txt = (spans[s].textContent ?? "").trim();
+        if (!txt || txt.length > 80) continue;
+        // "N of M selected" form — picks both numbers.
+        var mOf = txt.match(
+          /(\d+)\s+of\s+(\d+)\s+(?:records?|items?|rows?)?\s*(?:are\s+)?selected/i
+        );
+        if (mOf) {
+          var nSel = parseInt(mOf[1], 10);
+          var nTot = parseInt(mOf[2], 10);
+          if (Number.isFinite(nSel) && Number.isFinite(nTot)) {
+            bannerSelectedCount = Math.max(bannerSelectedCount ?? 0, nSel);
+            bannerTotal = Math.max(bannerTotal ?? 0, nTot);
+          }
+          continue;
+        }
+        // "N records selected" form.
+        var mN = txt.match(
+          /(\d+)\s+(?:records?|items?|rows?)\s+(?:are\s+)?selected/i
+        );
+        if (mN) {
+          var n = parseInt(mN[1], 10);
+          if (Number.isFinite(n) && n > 0) {
+            bannerSelectedCount = Math.max(bannerSelectedCount ?? 0, n);
+          }
+        }
+      }
+      var bannerSaysSelectAll =
+        bannerSelectedCount !== null &&
+        bannerSelectedCount > selected.length;
+
+      // ── Heuristic 3: every rendered row aria-selected="true" (legacy) ────
+      var allRenderedSelected =
+        selected.length > 0 &&
+        allSelectable.length > 0 &&
+        selected.length >= allSelectable.length;
+
+      var active = headerChecked || bannerSaysSelectAll || allRenderedSelected;
+
+      if (!active) {
+        return { active: false, totalRecords: null };
+      }
+
+      // ── Resolve totalRecords ─────────────────────────────────────────────
+      var totalRecords = bannerTotal;
+
+      // "1-23 of 90" style pagination text.
+      if (totalRecords === null) {
+        for (var i = 0; i < spans.length; i++) {
+          var t = (spans[i].textContent ?? "").trim();
+          if (!t || t.length > 80) continue;
+          var m = t.match(/(?:\d+\s*[-–]\s*\d+\s+)?of\s+(\d+)/i);
+          if (m) {
+            var nn = parseInt(m[1], 10);
+            if (Number.isFinite(nn) && nn > selected.length) {
+              totalRecords = nn;
+              break;
+            }
+          }
+        }
+      }
+
+      // Banner-only "N selected" — use it as the floor.
+      if (totalRecords === null && bannerSelectedCount !== null) {
+        totalRecords = bannerSelectedCount;
       }
 
       return { active: true, totalRecords: totalRecords };
@@ -248,22 +334,27 @@
         }
       }
 
-      // --- Fallback: parse URL parameters ---
-      var allParams = new URLSearchParams(window.location.search);
+      // --- Fallback: parse URL parameters (case-insensitive on key names) ---
+      // Different Dynamics versions/links emit viewid / viewId / ViewId etc.
+      var paramMap = {};
+      function ingestParams(usp) {
+        usp.forEach(function (v, k) {
+          var lk = k.toLowerCase();
+          if (paramMap[lk] === undefined) paramMap[lk] = v;
+        });
+      }
+      ingestParams(new URLSearchParams(window.location.search));
       var hash = window.location.hash;
       if (hash) {
         var h = hash.replace(/^#\/?/, "");
         var hashQuery = h.indexOf("?") !== -1 ? h : "?" + h;
-        var hp = new URLSearchParams(hashQuery);
-        hp.forEach(function (v, k) {
-          if (!allParams.has(k)) allParams.set(k, v);
-        });
+        ingestParams(new URLSearchParams(hashQuery));
       }
-      var rawId = allParams.get("viewid");
+      var rawId = paramMap["viewid"];
       if (!rawId) return null;
       var id = normaliseGuid(rawId);
       if (!isGuid(id)) return null;
-      var vt = allParams.get("viewtype");
+      var vt = paramMap["viewtype"];
       return { viewId: id, viewType: vt === "4230" ? "userquery" : "savedquery" };
     } catch {
       return null;

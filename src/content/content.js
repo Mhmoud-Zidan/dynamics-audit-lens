@@ -227,6 +227,7 @@ function requestFreshContext() {
 
 const API_VERSION = "9.2";
 const MAX_CONCURRENT = 5;
+const MAX_EXPORT_RECORDS = 250;
 const MAX_EXPORT_ROWS = 100_000;
 const MAX_USER_AUDIT_RECORDS = 500;
 const MAX_AUDIT_QUERY_PAGES = 20;
@@ -913,8 +914,8 @@ const FORMATTED_SUFFIX = "@OData.Community.Display.V1.FormattedValue";
  * Used as a fallback when the server does not return formatted annotations.
  */
 const CONTENT_I18N = {
-  en: { opCreate: "Create", opUpdate: "Update", opDelete: "Delete", opAccess: "Access", opUpsert: "Upsert", sessionExpired: "Session expired \u2014 please reload the page and re-authenticate.", accessDeniedAudit: "Access denied \u2014 you need the \"Audit Summary View\" (prvReadAuditSummary) privilege.", recordNotFound: "Record not found \u2014 it may have been deleted.", invalidPayload: "Invalid payload.", discoveringRecords: "Discovering records touched by user\u2026", foundRecordsFetching: "Found $count$ record(s). Fetching audit history\u2026" },
-  ar: { opCreate: "\u0625\u0646\u0634\u0627\u0621", opUpdate: "\u062a\u062d\u062f\u064a\u062b", opDelete: "\u062d\u0630\u0641", opAccess: "\u0648\u0635\u0648\u0644", opUpsert: "\u0625\u062f\u0631\u0627\u062c/\u062a\u062d\u062f\u064a\u062b", sessionExpired: "\u0627\u0646\u062a\u0647\u062a \u0627\u0644\u062c\u0644\u0633\u0629 \u2014 \u0623\u0639\u062f \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0635\u0641\u062d\u0629 \u0648\u0633\u062c\u0651\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0645\u062c\u062f\u062f\u0627\u064b.", accessDeniedAudit: "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0648\u0635\u0648\u0644 \u2014 \u062a\u062d\u062a\u0627\u062c \u0635\u0644\u0627\u062d\u064a\u0629 \"\u0639\u0631\u0636 \u0645\u0644\u062e\u0635 \u0627\u0644\u062a\u062f\u0642\u064a\u0642\" (prvReadAuditSummary).", recordNotFound: "\u0627\u0644\u0633\u062c\u0644 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u2014 \u0642\u062f \u064a\u0643\u0648\u0646 \u0642\u062f \u062a\u0645 \u062d\u0630\u0641\u0647.", invalidPayload: "\u062d\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629.", discoveringRecords: "\u062c\u0627\u0631\u0656 \u0627\u0643\u062a\u0634\u0627\u0641 \u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062a\u064a \u0644\u0645\u0633\u0647\u0627 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u2026", foundRecordsFetching: "\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 $count$ \u0633\u062c\u0644. \u062c\u0627\u0631\u0656 \u062c\u0644\u0628 \u0633\u062c\u0644 \u0627\u0644\u062a\u062f\u0642\u064a\u0642\u2026" },
+  en: { opCreate: "Create", opUpdate: "Update", opDelete: "Delete", opAccess: "Access", opUpsert: "Upsert", sessionExpired: "Session expired \u2014 please reload the page and re-authenticate.", accessDeniedAudit: "Access denied \u2014 you need the \"Audit Summary View\" (prvReadAuditSummary) privilege.", recordNotFound: "Record not found \u2014 it may have been deleted.", invalidPayload: "Invalid payload.", discoveringRecords: "Discovering records touched by user\u2026", foundRecordsFetching: "Found $count$ record(s). Fetching audit history\u2026", queryingDeletions: "Querying deletion audits\u2026", fetchingDeletedNames: "Found $count$ deletion(s). Looking up record names\u2026", entityTypeCodeUnavailable: "Could not resolve entity type code." },
+  ar: { opCreate: "\u0625\u0646\u0634\u0627\u0621", opUpdate: "\u062a\u062d\u062f\u064a\u062b", opDelete: "\u062d\u0630\u0641", opAccess: "\u0648\u0635\u0648\u0644", opUpsert: "\u0625\u062f\u0631\u0627\u062c/\u062a\u062d\u062f\u064a\u062b", sessionExpired: "\u0627\u0646\u062a\u0647\u062a \u0635\u0644\u0627\u062d\u064a\u0629 \u0627\u0644\u062c\u0644\u0633\u0629 \u2014 \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0635\u0641\u062d\u0629 \u0648\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0645\u062c\u062f\u062f\u0627\u064b.", accessDeniedAudit: "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0648\u0635\u0648\u0644 \u2014 \u062a\u062d\u062a\u0627\u062c \u0625\u0644\u0649 \u0635\u0644\u0627\u062d\u064a\u0629 \"\u0639\u0631\u0636 \u0645\u0644\u062e\u0635 \u0627\u0644\u062a\u062f\u0642\u064a\u0642\" (prvReadAuditSummary).", recordNotFound: "\u0627\u0644\u0633\u062c\u0644 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u2014 \u0631\u0628\u0645\u0627 \u062a\u0645 \u062d\u0630\u0641\u0647.", invalidPayload: "\u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u064f\u0631\u0633\u064e\u0644\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629.", discoveringRecords: "\u062c\u0627\u0631\u064d \u0627\u0644\u0628\u062d\u062b \u0639\u0646 \u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062a\u064a \u0639\u062f\u0651\u0644\u0647\u0627 \u0647\u0630\u0627 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u2026", foundRecordsFetching: "\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 $count$ \u0633\u062c\u0644. \u062c\u0627\u0631\u064d \u062c\u0644\u0628 \u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062a\u062f\u0642\u064a\u0642\u2026", queryingDeletions: "\u062c\u0627\u0631\u064d \u0627\u0644\u0627\u0633\u062a\u0639\u0644\u0627\u0645 \u0639\u0646 \u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062d\u0630\u0641\u2026", fetchingDeletedNames: "\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 $count$ \u0639\u0645\u0644\u064a\u0629 \u062d\u0630\u0641. \u062c\u0627\u0631\u064d \u062c\u0644\u0628 \u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0633\u062c\u0644\u0627\u062a\u2026", entityTypeCodeUnavailable: "\u062a\u0639\u0630\u0651\u0631 \u062a\u062d\u062f\u064a\u062f \u0631\u0645\u0632 \u0646\u0648\u0639 \u0627\u0644\u0643\u064a\u0627\u0646." },
 };
 
 async function getContentLang() {
@@ -1612,6 +1613,27 @@ chrome.runtime.onMessage.addListener(
         );
       return true;
     }
+
+    if (message.type === "RESOLVE_VIEW_RECORDS") {
+      const { entityLogicalName, viewId, viewType } = message;
+      try {
+        assertEntityLogicalName(entityLogicalName);
+        assertGuid(viewId);
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message ?? "Invalid payload." });
+        return false;
+      }
+      resolveViewRecordIds(
+        entityLogicalName,
+        viewId,
+        viewType === "userquery" ? "userquery" : "savedquery",
+      )
+        .then((guids) => sendResponse({ ok: true, guids }))
+        .catch((err) =>
+          sendResponse({ ok: false, error: err.message ?? String(err) }),
+        );
+      return true;
+    }
   },
 );
 
@@ -1629,6 +1651,11 @@ chrome.runtime.onConnect.addListener(function onPortConnect(port) {
 
   if (port.name === "user-audit-export") {
     handleUserAuditExportPort(port);
+    return;
+  }
+
+  if (port.name === "deleted-export") {
+    handleDeletedExportPort(port);
     return;
   }
 });
@@ -1829,6 +1856,323 @@ function handleUserAuditExportPort(port) {
     } catch (err) {
       if (portAlive()) {
         try { port.postMessage({ type: "error", error: err.message ?? String(err) }); } catch { /* port closed */ }
+      }
+    }
+  });
+}
+
+// ── Deleted records export ────────────────────────────────────────────────────
+//
+// Queries the audit entity for delete operations on a given entity within a
+// date range, optionally filtered by user. For each deletion, retrieves the
+// deleted record's name via RetrieveAuditDetails (OldValue snapshot).
+
+/**
+ * Build a Dataverse-compatible UTC ISO datetime from a "YYYY-MM-DD" string.
+ * @param {string} ymd
+ * @param {"start"|"end"} bound
+ */
+function ymdToIso(ymd, bound) {
+  const time = bound === "end" ? "T23:59:59.999" : "T00:00:00";
+  return new Date(`${ymd}${time}`).toISOString();
+}
+
+/**
+ * Query the audit entity for delete operations on a specific entity.
+ *
+ * Filters: action=3 (Delete) AND objecttypecode=<entity OTC>
+ *          AND createdon in [from, to] (when provided)
+ *          AND _userid_value=<userGuid> (when provided)
+ *
+ * @param {string}        entityLogicalName
+ * @param {string|null}   dateFrom   ISO "YYYY-MM-DD" or null
+ * @param {string|null}   dateTo     ISO "YYYY-MM-DD" or null
+ * @param {string|null}   userGuid   Optional user filter (bare GUID)
+ * @param {() => boolean} portAlive  Abort signal — returns false if popup closed
+ * @returns {Promise<Array<object>>} Raw audit rows
+ */
+async function fetchDeletedAuditRecords(
+  entityLogicalName, dateFrom, dateTo, userGuid, portAlive,
+) {
+  assertEntityLogicalName(entityLogicalName);
+  if (userGuid) assertGuid(userGuid);
+
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateFrom && !DATE_RE.test(dateFrom)) throw new Error("Invalid dateFrom format");
+  if (dateTo && !DATE_RE.test(dateTo)) throw new Error("Invalid dateTo format");
+
+  const meta = await fetchEntityMetadata(entityLogicalName);
+
+  // `audit.objecttypecode` is Edm.String in modern Dataverse (Web API 9.x) and
+  // contains the entity logical name (e.g. "mw_workorder"). Older on-prem
+  // versions exposed it as an integer (the entity OTC). We try the modern
+  // form first and fall back to the integer form on a 400 (type mismatch).
+  const buildUrl = (otcExpr) => {
+    let f = `action eq 3 and objecttypecode eq ${otcExpr}`;
+    if (userGuid) f += ` and _userid_value eq ${userGuid}`;
+    if (dateFrom) f += ` and createdon ge ${ymdToIso(dateFrom, "start")}`;
+    if (dateTo)   f += ` and createdon le ${ymdToIso(dateTo, "end")}`;
+    return (
+      `${getOrgUri()}/api/data/v${API_VERSION}/audits` +
+      `?$filter=${encodeURIComponent(f)}` +
+      `&$select=auditid,_objectid_value,_userid_value,createdon` +
+      `&$orderby=createdon desc`
+    );
+  };
+
+  // Primary: string form `objecttypecode eq 'entityname'`.
+  const otcVariants = [`'${entityLogicalName}'`];
+  // Fallback: integer form, only if metadata gave us a numeric type code.
+  if (typeof meta.objectTypeCode === "number") {
+    otcVariants.push(String(meta.objectTypeCode));
+  }
+
+  let lastErr = null;
+  for (const otcExpr of otcVariants) {
+    let nextUrl = buildUrl(otcExpr);
+    console.log("[Audit Lens] Deleted records query:", {
+      entityLogicalName,
+      dateFrom,
+      dateTo,
+      dateFromIso: dateFrom ? ymdToIso(dateFrom, "start") : null,
+      dateToIso: dateTo ? ymdToIso(dateTo, "end") : null,
+      userGuid,
+      otcExpr,
+      url: nextUrl,
+    });
+    const audits = [];
+    let typeMismatch = false;
+
+    for (let page = 0; page < MAX_AUDIT_QUERY_PAGES; page++) {
+      if (portAlive && !portAlive()) return audits;
+      const resp = await fetchWithRetry(() =>
+        fetch(nextUrl, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+      );
+      if (!resp.ok) {
+        if (resp.status === 401) throw new Error(ct("sessionExpired"));
+        if (resp.status === 403) throw new Error(ct("accessDeniedAudit"));
+        if (resp.status === 400 && page === 0) {
+          // Likely the OData "incompatible types" error — try next variant.
+          const text = await resp.text().catch(() => "");
+          if (/incompatible types|Edm\.String|Edm\.Int32/i.test(text)) {
+            typeMismatch = true;
+            lastErr = new Error(text || `HTTP 400`);
+            break;
+          }
+        }
+        throw new Error(`HTTP ${resp.status} while querying audits.`);
+      }
+      const json = await resp.json();
+      for (const row of json.value ?? []) audits.push(row);
+      if (audits.length >= MAX_USER_AUDIT_RECORDS) break;
+
+      const next = json["@odata.nextLink"];
+      if (!next) break;
+      try {
+        const parsed = new URL(next);
+        if (parsed.origin !== window.location.origin) break;
+        nextUrl = next;
+      } catch { break; }
+    }
+
+    if (!typeMismatch) {
+      return audits.slice(0, MAX_USER_AUDIT_RECORDS);
+    }
+  }
+
+  // Every variant rejected by the server with a type mismatch.
+  throw lastErr ?? new Error("Audit query failed: objecttypecode type mismatch.");
+}
+
+/**
+ * Fetch the full `AuditDetail` for a single audit record.
+ *
+ * For a Delete operation the response shape is:
+ *   { AuditDetail: { "@odata.type": "...AttributeAuditDetail",
+ *                    OldValue: {...record snapshot...}, NewValue: null } }
+ *
+ * Returns `null` (rather than throwing) when:
+ *   - the audit id is malformed,
+ *   - the server returns non-2xx (audit-on-delete disabled, 403, deleted from
+ *     audit-log retention, etc.).
+ *
+ * @param {string} auditId
+ * @returns {Promise<object|null>}
+ */
+async function fetchAuditDetail(auditId) {
+  try { assertGuid(auditId); } catch { return null; }
+  try {
+    const url =
+      `${getOrgUri()}/api/data/v${API_VERSION}/audits(${auditId})` +
+      `/Microsoft.Dynamics.CRM.RetrieveAuditDetails`;
+    const resp = await fetchWithRetry(() =>
+      fetch(url, { method: "GET", credentials: "include", headers: ODATA_HEADERS }),
+    );
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const detail = json?.AuditDetail;
+    return detail && typeof detail === "object" ? detail : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the record-name value from a Delete audit's OldValue snapshot.
+ *
+ * @param {object|null}  oldValue        The OldValue object from AuditDetail.
+ * @param {string|null}  primaryNameAttr Entity primary-name logical name.
+ * @returns {string|null}
+ */
+function extractRecordNameFromOldValue(oldValue, primaryNameAttr) {
+  if (!oldValue || typeof oldValue !== "object" || !primaryNameAttr) return null;
+  const formattedKey = `${primaryNameAttr}${FORMATTED_SUFFIX}`;
+  const v = oldValue[formattedKey] ?? oldValue[primaryNameAttr];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function handleDeletedExportPort(port) {
+  let alive = true;
+  port.onDisconnect.addListener(() => { alive = false; });
+  const portAlive = () => alive;
+
+  port.onMessage.addListener(async function onDelPortMessage(msg) {
+    const { entityLogicalName, dateFrom, dateTo, userGuid } = msg ?? {};
+    if (typeof entityLogicalName !== "string" || entityLogicalName.length === 0) {
+      try { port.postMessage({ type: "error", error: ct("invalidPayload") }); } catch { /* */ }
+      return;
+    }
+    if (userGuid && (typeof userGuid !== "string" || !GUID_PATTERN.test(userGuid))) {
+      try { port.postMessage({ type: "error", error: ct("invalidPayload") }); } catch { /* */ }
+      return;
+    }
+
+    try {
+      if (portAlive()) port.postMessage({ type: "phase", text: ct("queryingDeletions") });
+
+      const audits = await fetchDeletedAuditRecords(
+        entityLogicalName, dateFrom || null, dateTo || null, userGuid || null, portAlive,
+      );
+
+      if (!portAlive()) return;
+      if (audits.length === 0) {
+        port.postMessage({ type: "done", rows: [] });
+        return;
+      }
+
+      port.postMessage({
+        type: "phase",
+        text: ct("fetchingDeletedNames").replace(/\$\w+\$/, String(audits.length)),
+      });
+
+      const meta = await fetchEntityMetadata(entityLogicalName);
+
+      // Pre-fetch all user display names referenced by the audits — saves an
+      // O(N) round-trip when names aren't in the audit's FormattedValue annotation.
+      const userGuids = new Set();
+      for (const a of audits) {
+        const uid = a._userid_value;
+        if (typeof uid === "string" && GUID_PATTERN.test(uid)) {
+          userGuids.add(uid.toLowerCase());
+        }
+      }
+      const sharedUserNameMap = await fetchUserDisplayNames(userGuids);
+
+      const allRows = [];
+      let done = 0;
+      let rowCapHit = false;
+      let lastProgressPosted = -1;
+
+      const tasks = audits.map((a) => async () => {
+        if (!portAlive() || rowCapHit) return;
+
+        const recordIdRaw = a._objectid_value;
+        if (typeof recordIdRaw !== "string" || !GUID_PATTERN.test(recordIdRaw)) {
+          done++;
+          return; // Skip audits without a valid object id (should never happen).
+        }
+        const recordId = recordIdRaw.toLowerCase();
+
+        const detail = await fetchAuditDetail(a.auditid);
+        const oldValue = detail?.OldValue ?? {};
+        const recordName = extractRecordNameFromOldValue(oldValue, meta.primaryName);
+
+        const userFormatted =
+          a[`_userid_value${FORMATTED_SUFFIX}`] ??
+          (typeof a._userid_value === "string"
+            ? sharedUserNameMap.get(a._userid_value.toLowerCase())
+            : undefined);
+
+        // Wrap the single audit into the AuditDetailCollection shape that
+        // formatAuditResults consumes, so we get the exact same column layout
+        // as the existing audit export: RecordID, RecordName, ChangedBy,
+        // ChangedDate, Operation, FieldName, OldValue, NewValue.
+        const rawAuditData = {
+          AuditDetailCollection: {
+            AuditDetails: [{
+              AuditRecord: {
+                auditid: a.auditid,
+                _userid_value: a._userid_value ?? null,
+                [`_userid_value${FORMATTED_SUFFIX}`]: userFormatted ?? undefined,
+                createdon: a.createdon ?? "",
+                operation: 3,
+                [`operation${FORMATTED_SUFFIX}`]: ct("opDelete"),
+                attributemask: detail?.AuditRecord?.attributemask ?? "",
+              },
+              // For a Delete, formatAuditResults emits one row per field
+              // that had a value before deletion. NewValue stays empty.
+              OldValue: oldValue,
+              NewValue: {},
+            }],
+          },
+        };
+
+        const rows = await formatAuditResults(
+          recordId,
+          entityLogicalName,
+          rawAuditData,
+          recordName,
+          sharedUserNameMap,
+        );
+
+        // If the entity has audit-on-delete disabled, OldValue will be empty
+        // and formatAuditResults emits zero rows. Surface a single summary row
+        // so the user still sees the deletion event in the export.
+        if (rows.length === 0) {
+          rows.push({
+            RecordID: recordId,
+            RecordName: recordName ?? "",
+            ChangedBy: userFormatted || "(unknown)",
+            ChangedDate: a.createdon ? new Date(a.createdon) : "",
+            Operation: ct("opDelete"),
+            FieldName: "(no field-level audit available)",
+            OldValue: "",
+            NewValue: "",
+          });
+        }
+
+        for (const row of rows) {
+          if (allRows.length >= MAX_EXPORT_ROWS) { rowCapHit = true; break; }
+          allRows.push(row);
+        }
+
+        done++;
+        if (portAlive() && (done - lastProgressPosted >= 3 || done === audits.length)) {
+          lastProgressPosted = done;
+          try { port.postMessage({ type: "progress", done, total: audits.length }); }
+          catch { /* port closed */ }
+        }
+      });
+
+      await runPool(tasks, MAX_CONCURRENT);
+
+      if (portAlive()) {
+        port.postMessage({ type: "done", rows: allRows, capped: rowCapHit });
+      }
+    } catch (err) {
+      if (portAlive()) {
+        try { port.postMessage({ type: "error", error: err.message ?? String(err) }); }
+        catch { /* port closed */ }
       }
     }
   });
